@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import database, models
 
 # 启动时自动在数据库建表 (C++思维：类似编译时链接)
-models.Base.metadata.create_all(bind=database.engine)
+models.Base.metadata.create_all(bind=database.engine)   # 创建所有以Base类为基类的模型类的元数据
 
 app = FastAPI()
 
