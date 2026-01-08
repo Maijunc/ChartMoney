@@ -1,4 +1,4 @@
-from sqlalchemy import func, Column, String, BigInteger, DateTime, ForeignKey, Boolean, DECIMAL
+from sqlalchemy import func, String, BigInteger, DateTime, ForeignKey, Boolean, DECIMAL
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.dialects.mysql import TINYINT   # TINYINT是MySql数据库特有类型，属于方言
 from typing import List
