@@ -29,7 +29,7 @@ class User(Base):   # 用户表的模型类
     username: Mapped[str] = mapped_column(type_=String(20), comment="用户名", nullable=False)
     password: Mapped[str] = mapped_column(type_=String(64), comment="用户密码", nullable=False)
     phone: Mapped[str] = mapped_column(type_=String(11), comment="电话号码", nullable=False)
-    avatar: Mapped[str] = mapped_column(type_=String(255), comment="头像地址")
+    avatar: Mapped[str] = mapped_column(type_=String(255), comment="头像地址", nullable=True)
 
     bill_categories: Mapped[List["Bill_Category"]] = relationship(back_populates="user")    # 一个用户对应多个分类，使用List
     bills: Mapped[List["Bill"]] = relationship(back_populates="user")   # 一个用户对应多个账单
@@ -44,7 +44,7 @@ class Bill_Category(Base):
     is_sys: Mapped[bool] = mapped_column(type_=Boolean, default=False, comment="是否是系统分类")
     name: Mapped[str] = mapped_column(type_=String(20), comment="分类名称", nullable=False)
 
-    user: Mapped["User"] = relationship(back_populates="bill_category", uselist=False)  # 一个账单分类对应一个用户
+    user: Mapped["User"] = relationship(back_populates="bill_categories", uselist=False)  # 一个账单分类对应一个用户
     bills: Mapped[List["Bill"]] = relationship(back_populates="bill_category")    # 一个账单分类对应多个账单
     budgets: Mapped[List["Budget"]] = relationship(back_populates="bill_category")  # 一个账单分类对应多个预算
 
@@ -60,8 +60,8 @@ class Bill(Base):
     remark: Mapped[str] = mapped_column(String(255), nullable=True, comment="账单备注")
     bill_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, comment="订单发生时间")
 
-    user: Mapped["User"] = relationship(back_populates="bill", uselist=False)   # 一个账单对应一个用户
-    bill_category: Mapped["Bill_Category"] = relationship(back_populates="bill", uselist=False)    # 一个账单对应一个分类
+    user: Mapped["User"] = relationship(back_populates="bills", uselist=False)   # 一个账单对应一个用户
+    bill_category: Mapped["Bill_Category"] = relationship(back_populates="bills", uselist=False)    # 一个账单对应一个分类
 
 
 class Budget(Base):
@@ -75,5 +75,5 @@ class Budget(Base):
     amount: Mapped[float] = mapped_column(type_=DECIMAL(10, 2), nullable=False, comment="金额")
     month: Mapped[str] = mapped_column(type_=String(7), nullable=False, comment="月份")
 
-    user: Mapped["User"] = relationship(back_populates="budget", uselist=False) # 一个预算对应一个用户
-    bill_category: Mapped["Bill_Category"] = relationship(back_populates="budget", uselist=False)   # 一个预算对应一个分类
+    user: Mapped["User"] = relationship(back_populates="budgets", uselist=False) # 一个预算对应一个用户
+    bill_category: Mapped["Bill_Category"] = relationship(back_populates="budgets", uselist=False)   # 一个预算对应一个分类
