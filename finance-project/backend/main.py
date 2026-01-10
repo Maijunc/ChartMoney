@@ -23,15 +23,41 @@ def read_root():
 
 
 @app.post("/user/login")
-def user_login(user: schemas.User, db: Session = Depends(database.get_db)):     # Depends依赖注入的一定是可调用函数对象
-    result = crud.user_login(user.username, user.password, db)
+def user_login(user: schemas.User, db: Session = Depends(database.get_db)):
+    # ↑Depends依赖注入的一定是可调用函数对象，且Depends必须在处理函数中使用才会有效
+    result = crud.user_login(user, db)
     if result:
         return {
-            "code": "200",
-            "result": "success"
+            "code": 200,
+            "message": "success"
         }
     else:
         return {
             "code": "401",
-            "result": "failure"
+            "message": "failure"
+        }
+
+
+@app.post("/user/register")
+def user_resgister(user: schemas.User_register, db: Session = Depends(database.get_db)):
+    result = crud.user_register(user, db)
+    if result == 1:
+        return {
+            "code": 200,
+            "message": "success"
+        }
+    if result == -1:
+        return {
+            "code": 400,
+	        "message": "username already exists"
+        }
+    if result == -2:
+        return {
+            "code": 400,
+            "message": "the phone number already exists"
+        }
+    if result == 0:
+        return {
+            "code": 400,
+            "message": "operational error"
         }

@@ -1,7 +1,16 @@
 from pydantic import BaseModel, Field
 
 
+# 请求体参数对象
 class User(BaseModel):
     # 除了指定输入什么数据外，还要能对数据的格式做限制
+    username: str = Field(..., min_length=1, max_length=20)     # Field用于增加对于参数的约束
+    password: str = Field(..., min_length=1, max_length=64)
+
+
+class User_register(BaseModel):
+    # 必须接收用户名和手机号作为参数，且用户名和手机号在数据库中都必须唯一
     username: str = Field(..., min_length=1, max_length=20)
+    # 手机号必须为11位，且是以1开头的11位数字
+    phone: str = Field(..., min_length=11, max_length=11, pattern=r"^1\d{10}$")
     password: str = Field(..., min_length=1, max_length=64)
