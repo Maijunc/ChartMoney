@@ -22,6 +22,7 @@ def read_root():
     return {"message": "Hello from FastAPI Backend!"}
 
 
+# 用户登录处理函数
 @app.post("/user/login")
 def user_login(user: schemas.User, db: Session = Depends(database.get_db)):
     # ↑Depends依赖注入的一定是可调用函数对象，且Depends必须在处理函数中使用才会有效
@@ -38,6 +39,7 @@ def user_login(user: schemas.User, db: Session = Depends(database.get_db)):
         }
 
 
+# 用户注册处理函数
 @app.post("/user/register")
 def user_resgister(user: schemas.User_register, db: Session = Depends(database.get_db)):
     result = crud.user_register(user, db)
@@ -63,6 +65,7 @@ def user_resgister(user: schemas.User_register, db: Session = Depends(database.g
         }
 
 
+# 账单分类创建处理函数
 @app.post("/bill_category/add")
 def bill_category_add(bill_category: schemas.bill_category_add, db: Session = Depends(database.get_db)):
     result = crud.bill_category_add(bill_category, db)
@@ -77,6 +80,42 @@ def bill_category_add(bill_category: schemas.bill_category_add, db: Session = De
             "message": "unable to be inserted into the database"
         }
     elif result == -1 or result == -2:
+        return {
+            "code": 400,
+            "message": "category already exist"
+        }
+
+
+# 账单分类修改处理函数
+@app.put("/bill_category/update")
+def bill_category_update(bill_category: schemas.bill_category_update, db: Session = Depends(database.get_db)):
+    result = crud.bill_category_update(bill_category, db)
+    if result == 1:
+        return {
+            "code": 200,
+            "message": "success"
+        }
+    elif result == 0:
+        return {
+            "code": 5001,
+            "message": "unable to be inserted into the database"
+        }
+    elif result == -1:
+        return {
+            "code": 404,
+            "message": "target category does not exist"
+        }
+    elif result == -2:
+        return{
+            "code": 401,
+            "message": "can not revise a system preset category"
+        }
+    elif result == -3:
+        return {
+            "code": 401,
+            "message": "can not revise other user's category"
+        }
+    elif result == -4 or result == -5:
         return {
             "code": 400,
             "message": "category already exist"

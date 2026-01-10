@@ -1,6 +1,6 @@
 from models import User, Bill_Category
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, update
 import schemas
 
 """
@@ -68,3 +68,45 @@ def bill_category_add(bill_category: schemas.bill_category_add, db: Session):
         return 1
     except Exception:
         return 0    # 数据库插入失败
+
+
+# 用于修改账单分类
+def bill_category_update(bill_category: schemas.bill_category_update, db: Session):
+    update_bill_category = db.query(Bill_Category).filter(Bill_Category.id == bill_category.category_id).first()
+    # 分类不存在
+    if update_bill_category is None:
+        return -1
+    else:
+        # 用户不能修改系统预设分类
+        if update_bill_category.is_sys == True:
+            return -2
+
+        # 用户无权修改别的用户的分类
+        if update_bill_category.user_id != bill_category.user_id:
+            return  -3
+
+        # 检查修改后的分类名是否和用户已有的分类名重复
+        check1 = db.execute(select(Bill_Category).where((Bill_Category.user_id == bill_category.user_id)
+                                                        & (Bill_Category.name == bill_category.name)))
+        check_result1 = check1.scalar_one_or_none()
+
+        # 检查修改后的分类名是否和系统分类名重复
+        check2 = db.execute(select(Bill_Category).where((Bill_Category.is_sys == True)
+                                                        & (Bill_Category.name == bill_category.name)))
+        check_result2 = check2.scalar_one_or_none()
+
+        if check_result1 is not None:
+            return -4
+        if check_result2 is not None:
+            return -5
+
+        else:
+            try:
+                stmt = update(Bill_Category).where(Bill_Category.id==bill_category.category_id).values(
+                    name=bill_category.name
+                )
+                db.execute(stmt)
+                db.commit()
+                return 1
+            except Exception:
+                return 0    # 数据库修改失败
