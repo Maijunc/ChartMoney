@@ -46,18 +46,38 @@ def user_resgister(user: schemas.User_register, db: Session = Depends(database.g
             "code": 200,
             "message": "success"
         }
-    if result == -1:
+    elif result == -1:
         return {
             "code": 400,
 	        "message": "username already exists"
         }
-    if result == -2:
+    elif result == -2:
         return {
             "code": 400,
             "message": "the phone number already exists"
         }
-    if result == 0:
+    elif result == 0:
         return {
             "code": 400,
             "message": "operational error"
+        }
+
+
+@app.post("/bill_category/add")
+def bill_category_add(bill_category: schemas.bill_category_add, db: Session = Depends(database.get_db)):
+    result = crud.bill_category_add(bill_category, db)
+    if result == 1:
+        return {
+            "code": 200,
+            "message": "success"
+        }
+    elif result == 0:
+        return {
+            "code": 5001,
+            "message": "unable to be inserted into the database"
+        }
+    elif result == -1 or result == -2:
+        return {
+            "code": 400,
+            "message": "category already exist"
         }
