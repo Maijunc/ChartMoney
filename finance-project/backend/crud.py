@@ -45,15 +45,15 @@ def user_register(user: schemas.User_register, db: Session):
 
 
 # 用于创建账单分类
-def bill_category_add(bill_category: schemas.bill_category_add, db: Session):
+def category_add(category: schemas.category_add, db: Session):
     # 检查用户此前是否添加过同名的分类
-    check1 = db.execute(select(Bill_Category).where((Bill_Category.user_id == bill_category.user_id)
-                & (Bill_Category.name == bill_category.name)))
+    check1 = db.execute(select(Bill_Category).where((Bill_Category.user_id == category.user_id)
+                & (Bill_Category.name == category.name)))
     check_result1 = check1.scalar_one_or_none()
 
     # 检查用户是否试图添加一个同系统分类同名的分类
     check2 = db.execute(select(Bill_Category).where((Bill_Category.is_sys == True)
-                & (Bill_Category.name == bill_category.name)))
+                & (Bill_Category.name == category.name)))
     check_result2 = check2.scalar_one_or_none()
 
     if check_result1 is not None:
@@ -61,9 +61,9 @@ def bill_category_add(bill_category: schemas.bill_category_add, db: Session):
     if check_result2 is not None:
         return -2
 
-    new_bill_category = Bill_Category(user_id=bill_category.user_id, is_sys=False, name=bill_category.name)
+    new_category = Bill_Category(user_id=category.user_id, is_sys=False, name=category.name)
     try:
-        db.add(new_bill_category)
+        db.add(new_category)
         db.commit()
         return 1
     except Exception:
@@ -71,28 +71,28 @@ def bill_category_add(bill_category: schemas.bill_category_add, db: Session):
 
 
 # 用于修改账单分类
-def bill_category_update(bill_category: schemas.bill_category_update, db: Session):
-    update_bill_category = db.query(Bill_Category).filter(Bill_Category.id == bill_category.category_id).first()
+def category_update(category: schemas.category_update, db: Session):
+    update_category = db.query(Bill_Category).filter(Bill_Category.id == category.category_id).first()
     # 分类不存在
-    if update_bill_category is None:
+    if update_category is None:
         return -1
     else:
         # 用户不能修改系统预设分类
-        if update_bill_category.is_sys == True:
+        if update_category.is_sys == True:
             return -2
 
         # 用户无权修改别的用户的分类
-        if update_bill_category.user_id != bill_category.user_id:
+        if update_category.user_id != category.user_id:
             return  -3
 
         # 检查修改后的分类名是否和用户已有的分类名重复
-        check1 = db.execute(select(Bill_Category).where((Bill_Category.user_id == bill_category.user_id)
-                                                        & (Bill_Category.name == bill_category.name)))
+        check1 = db.execute(select(Bill_Category).where((Bill_Category.user_id == category.user_id)
+                                                        & (Bill_Category.name == category.name)))
         check_result1 = check1.scalar_one_or_none()
 
         # 检查修改后的分类名是否和系统分类名重复
         check2 = db.execute(select(Bill_Category).where((Bill_Category.is_sys == True)
-                                                        & (Bill_Category.name == bill_category.name)))
+                                                        & (Bill_Category.name == category.name)))
         check_result2 = check2.scalar_one_or_none()
 
         if check_result1 is not None:
@@ -102,11 +102,36 @@ def bill_category_update(bill_category: schemas.bill_category_update, db: Sessio
 
         else:
             try:
-                stmt = update(Bill_Category).where(Bill_Category.id==bill_category.category_id).values(
-                    name=bill_category.name
+                stmt = update(Bill_Category).where(Bill_Category.id==category.category_id).values(
+                    name=category.name
                 )
                 db.execute(stmt)
                 db.commit()
                 return 1
             except Exception:
-                return 0    # 数据库修改失败
+                # 数据库修改失败
+                return 0
+
+
+# 用于删除账单分类
+def category_delete(category: schemas.category_delete, db: Session):
+    delete_category = db.query(Bill_Category).where(Bill_Category.id==category.category_id).first()
+
+    # 不存在此分类
+    if delete_category is None:
+        return -1
+    # 不能删除系统预设分类
+    elif delete_category.is_sys is True:
+        return -2
+    # 不能删除别的用户的分类
+    elif delete_category.user_id != category.user_id:
+        return -3
+    else:
+        # 尝试进行删除操作
+        try:
+            db.delete(delete_category)
+            db.commit()
+            return 1
+        except Exception:
+            # 数据库修改失败
+            return 0

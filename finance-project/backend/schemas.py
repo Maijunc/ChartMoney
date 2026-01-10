@@ -23,13 +23,19 @@ class User_register(BaseModel):
 
 
 # 用于创建账单分类
-class bill_category_add(BaseModel):
+class category_add(BaseModel):
     user_id: int = Field(..., ge=1)     # 必填且大于1
     name: str = Field(..., min_length=1, max_length=20)
 
 
 # 用于修改账单分类名
-class bill_category_update(BaseModel):
+class category_update(BaseModel):
     user_id: int = Field(..., ge=1)
     category_id: int = Field(..., ge=1)
     name: str = Field(..., min_length=1, max_length=20)
+
+
+# 用于删除账单分类
+class category_delete(BaseModel):
+    user_id: int = Field(..., ge=1)
+    category_id: int = Field(..., ge=1)

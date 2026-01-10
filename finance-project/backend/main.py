@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 import database, models, schemas, crud
 
 # 启动时自动在数据库建表 (C++思维：类似编译时链接)
-models.Base.metadata.create_all(bind=database.engine)   # 创建所有以Base类为基类的模型类的元数据
+models.Base.metadata.create_all(bind=database.engine)  # 创建所有以Base类为基类的模型类的元数据
 
 app = FastAPI()
 
@@ -16,6 +16,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.get("/")
 def read_root():
@@ -51,7 +52,7 @@ def user_resgister(user: schemas.User_register, db: Session = Depends(database.g
     elif result == -1:
         return {
             "code": 400,
-	        "message": "username already exists"
+            "message": "username already exists"
         }
     elif result == -2:
         return {
@@ -66,9 +67,9 @@ def user_resgister(user: schemas.User_register, db: Session = Depends(database.g
 
 
 # 账单分类创建处理函数
-@app.post("/bill_category/add")
-def bill_category_add(bill_category: schemas.bill_category_add, db: Session = Depends(database.get_db)):
-    result = crud.bill_category_add(bill_category, db)
+@app.post("/category/add")
+def bill_category_add(category: schemas.category_add, db: Session = Depends(database.get_db)):
+    result = crud.category_add(category, db)
     if result == 1:
         return {
             "code": 200,
@@ -87,9 +88,9 @@ def bill_category_add(bill_category: schemas.bill_category_add, db: Session = De
 
 
 # 账单分类修改处理函数
-@app.put("/bill_category/update")
-def bill_category_update(bill_category: schemas.bill_category_update, db: Session = Depends(database.get_db)):
-    result = crud.bill_category_update(bill_category, db)
+@app.put("/category/update")
+def bill_category_update(category: schemas.category_update, db: Session = Depends(database.get_db)):
+    result = crud.category_update(category, db)
     if result == 1:
         return {
             "code": 200,
@@ -106,7 +107,7 @@ def bill_category_update(bill_category: schemas.bill_category_update, db: Sessio
             "message": "target category does not exist"
         }
     elif result == -2:
-        return{
+        return {
             "code": 401,
             "message": "can not revise a system preset category"
         }
@@ -119,4 +120,36 @@ def bill_category_update(bill_category: schemas.bill_category_update, db: Sessio
         return {
             "code": 400,
             "message": "category already exist"
+        }
+
+
+# 账单分类删除
+@app.delete("/category/delete")
+def bill_category_delete(category: schemas.category_delete, db: Session = Depends(database.get_db)):
+    result = crud.category_delete(category, db)
+
+    if result == 1:
+        return {
+            "code": 200,
+            "message": "success"
+        }
+    elif result == 0:
+        return {
+            "code": 5001,
+            "message": "cannot delete from the database"
+        }
+    elif result == -1:
+        return {
+            "code": 404,
+            "message": "category does not exist"
+        }
+    elif result == -2:
+        return {
+            "code": 401,
+            "message": "cannot delete system preset category"
+        }
+    elif result == -3:
+        return {
+            "code": 401,
+            "message": "cannot delete other user's category"
         }
