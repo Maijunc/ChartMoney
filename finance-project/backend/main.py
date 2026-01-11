@@ -153,3 +153,21 @@ def bill_category_delete(category: schemas.category_delete, db: Session = Depend
             "code": 401,
             "message": "cannot delete other user's category"
         }
+
+
+# 获取账单分类列表
+@app.get("/category/list")
+def bill_category_list(user_id: int, db: Session = Depends(database.get_db)):
+    result = crud.category_list(user_id, db)
+    if result == 0:
+        return {
+            "code": "401",
+            "message": "user does not exist",
+            "data": []
+        }
+    else:
+        return {
+            "code": "200",
+            "message": "success",
+            "data": result
+        }

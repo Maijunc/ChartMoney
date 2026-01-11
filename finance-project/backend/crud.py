@@ -72,7 +72,10 @@ def category_add(category: schemas.category_add, db: Session):
 
 # 用于修改账单分类
 def category_update(category: schemas.category_update, db: Session):
-    update_category = db.query(Bill_Category).filter(Bill_Category.id == category.category_id).first()
+    # update_category = db.query(Bill_Category).filter(Bill_Category.id == category.category_id).first()
+    update_category = db.execute(select(Bill_Category).where(Bill_Category.id == category.category_id))\
+        .scalar_one_or_none()
+
     # 分类不存在
     if update_category is None:
         return -1
@@ -135,3 +138,43 @@ def category_delete(category: schemas.category_delete, db: Session):
         except Exception:
             # 数据库修改失败
             return 0
+
+
+# 用于获取用户的账单分类列表
+def category_list(user_id: int, db: Session):
+    # 先查看传入的用户id是否存在
+    stmt = select(User).where(User.id == user_id)
+    check = db.scalar(stmt)
+    if check is None:
+        return 0
+
+    # 获取系统预设分类(需要使用scalars)
+    stmt = select(Bill_Category).where(Bill_Category.is_sys == True)
+    sys_category = db.scalars(stmt).all()
+
+    # 获取用户自定义的分类
+    stmt = select(Bill_Category).where(Bill_Category.user_id == user_id)
+    user_category = db.scalars(stmt).all()
+
+    result_list = []
+
+    for category in sys_category:
+        result_list.append({
+            "category_id": category.id,
+            "user_id": category.user_id,
+            "is_sys": category.is_sys,
+            "name": category.name,
+            "create_time": category.create_time,
+            "update_time": category.update_time
+        })
+    for category in user_category:
+        result_list.append({
+            "category_id": category.id,
+            "user_id": category.user_id,
+            "is_sys": category.is_sys,
+            "name": category.name,
+            "create_time": category.create_time,
+            "update_time": category.update_time
+        })
+
+    return result_list
