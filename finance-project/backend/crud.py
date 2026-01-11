@@ -120,6 +120,9 @@ def category_update(category: schemas.category_update, db: Session):
 def category_delete(category: schemas.category_delete, db: Session):
     delete_category = db.query(Bill_Category).where(Bill_Category.id==category.category_id).first()
 
+    stmt = select(Bill).where(Bill.category_id==category.category_id)
+    check = db.scalars(stmt).first()
+
     # 不存在此分类
     if delete_category is None:
         return -1
@@ -129,15 +132,18 @@ def category_delete(category: schemas.category_delete, db: Session):
     # 不能删除别的用户的分类
     elif delete_category.user_id != category.user_id:
         return -3
-    else:
-        # 尝试进行删除操作
-        try:
-            db.delete(delete_category)
-            db.commit()
-            return 1
-        except Exception:
-            # 数据库修改失败
-            return 0
+    # 如果这个分类有账单存在，不能删除
+    if check is not None:
+        return -4
+
+    # 尝试进行删除操作
+    try:
+        db.delete(delete_category)
+        db.commit()
+        return 1
+    except Exception:
+        # 数据库修改失败
+        return 0
 
 
 # 用于获取用户的账单分类列表
@@ -210,4 +216,49 @@ def bill_add(bill: schemas.bill_add, db: Session):
         db.commit()
         return 1
     except Exception:
+        return 0
+
+
+# 用于修改账单
+def bill_update(bill: schemas.bill_update, db: Session):
+    stmt = select(User).where(User.id==bill.user_id)
+    user = db.scalar(stmt)
+
+    stmt = select(Bill_Category).where(Bill_Category.id==bill.category_id)
+    category = db.scalar(stmt)
+
+    stmt = select(Bill).where(Bill.id==bill.bill_id)
+    target = db.scalar(stmt)
+
+    # 用户不存在
+    if user is None:
+        return -1
+    # 分类不存在
+    if category is None:
+        return -2
+    # 账单不存在
+    if target is None:
+        return -3
+    # 此分类不属于这个用户
+    if category.is_sys == False:
+        if category.user_id != bill.user_id:
+            return -4
+    # 此账单不属于这个用户
+    if target.user_id != bill.user_id:
+        return -5
+
+    try:
+        # 尝试修改数据库
+        stmt = update(Bill).where(Bill.id==bill.bill_id).values(
+            category_id=bill.category_id,
+            amount=bill.amount,
+            type=bill.type,
+            remark=bill.remark,
+            bill_time=bill.bill_time
+        )
+        db.execute(stmt)
+        db.commit()
+        return 1
+    except Exception:
+        # 数据库出错
         return 0

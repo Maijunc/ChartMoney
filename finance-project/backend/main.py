@@ -153,6 +153,11 @@ def bill_category_delete(category: schemas.category_delete, db: Session = Depend
             "code": 401,
             "message": "cannot delete other user's category"
         }
+    elif result == -4:
+        return {
+            "code": 400,
+            "message": "this category has bills associated with it and cannot be deleted"
+        }
 
 
 # 获取账单分类列表
@@ -197,4 +202,46 @@ def bill_add(bill: schemas.bill_add, db: Session = Depends(database.get_db)):
         return {
             "code": 401,
             "message": "category does not exist, the user does not have such category"
+        }
+
+
+# 修改订单
+@app.put("/bill/update")
+def bill_update(bill: schemas.bill_update, db: Session = Depends(database.get_db)):
+    result = crud.bill_update(bill, db)
+
+    if result == 1:
+        return {
+            "code": 200,
+            "message": "success"
+        }
+    elif result == 0:
+        return {
+            "code": 5001,
+            "message": "failed to modify the database"
+        }
+    elif result == -1:
+        return {
+            "code": 401,
+            "message": "user does not exist"
+        }
+    elif result == -2:
+        return {
+            "code": 400,
+            "message": "category does not exist"
+        }
+    elif result == -3:
+        return {
+            "code": 400,
+            "message": "the bill does not exist"
+        }
+    elif result == -4:
+        return {
+            "code": 401,
+            "message": "this user does not have such a category"
+        }
+    elif result == -5:
+        return {
+            "code": 401,
+            "message": "this user does not have such a bill"
         }

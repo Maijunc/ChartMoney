@@ -50,3 +50,14 @@ class bill_add(BaseModel):
     type: int = Field(..., ge=1, le=2)
     bill_time: datetime
     remark: str = Field(max_length=255)
+
+
+# 用于修改账单
+class bill_update(BaseModel):
+    user_id: int = Field(..., ge=1)
+    category_id: int = Field(..., ge=1)
+    bill_id: int = Field(..., ge=1)
+    amount: float = Field(..., gt=0)
+    type: int = Field(..., ge=1, le=2)
+    bill_time: datetime
+    remark: str = Field(max_length=255)
