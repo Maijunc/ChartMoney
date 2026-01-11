@@ -1,4 +1,4 @@
-from models import User, Bill_Category
+from models import User, Bill_Category, Bill
 from sqlalchemy.orm import Session
 from sqlalchemy import select, update
 import schemas
@@ -178,3 +178,36 @@ def category_list(user_id: int, db: Session):
         })
 
     return result_list
+
+
+# 用于创建账单
+def bill_add(bill: schemas.bill_add, db: Session):
+    stmt = select(User).where(User.id==bill.user_id)
+    user = db.scalar(stmt)
+
+    # 用户不存在
+    if user is None:
+        return -1
+
+    stmt = select(Bill_Category).where(Bill_Category.id == bill.category_id)
+    category = db.scalar(stmt)
+
+    # 不是系统预设分类时，发现此分类不是该用户创建的分类
+    if category.is_sys == False:
+        if category.user_id != bill.user_id:
+            return -2
+
+    try:
+        new_bill = Bill(
+            user_id = bill.user_id,
+            category_id = bill.category_id,
+            amount = bill.amount,
+            type = bill.type,
+            remark = bill.remark,
+            bill_time = bill.bill_time
+        )
+        db.add(new_bill)
+        db.commit()
+        return 1
+    except Exception:
+        return 0

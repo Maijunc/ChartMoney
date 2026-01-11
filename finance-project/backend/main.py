@@ -171,3 +171,30 @@ def bill_category_list(user_id: int, db: Session = Depends(database.get_db)):
             "message": "success",
             "data": result
         }
+
+
+# 创建订单
+@app.post("/bill/add")
+def bill_add(bill: schemas.bill_add, db: Session = Depends(database.get_db)):
+    result = crud.bill_add(bill, db)
+
+    if result == 1:
+        return {
+            "code": 200,
+            "message": "success"
+        }
+    elif result == 0:
+        return {
+            "code": 5001,
+            "message": "unable to be inserted into the database"
+        }
+    elif result == -1:
+        return {
+            "code": 401,
+            "message": "user does not exist"
+        }
+    elif result == -2:
+        return {
+            "code": 401,
+            "message": "category does not exist, the user does not have such category"
+        }

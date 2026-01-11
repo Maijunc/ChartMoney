@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field
+from datetime import datetime
 
 
 """
@@ -39,3 +40,13 @@ class category_update(BaseModel):
 class category_delete(BaseModel):
     user_id: int = Field(..., ge=1)
     category_id: int = Field(..., ge=1)
+
+
+# 用于添加账单
+class bill_add(BaseModel):
+    user_id: int = Field(..., ge=1)
+    category_id: int = Field(..., ge=1)
+    amount: float = Field(..., gt=0)
+    type: int = Field(..., ge=1, le=2)
+    bill_time: datetime
+    remark: str = Field(max_length=255)
