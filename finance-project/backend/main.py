@@ -245,3 +245,35 @@ def bill_update(bill: schemas.bill_update, db: Session = Depends(database.get_db
             "code": 401,
             "message": "this user does not have such a bill"
         }
+
+
+# 删除账单
+@app.delete("/bill/delete")
+def bill_delete(bill: schemas.bill_delete, db: Session = Depends(database.get_db)):
+    result = crud.bill_delete(bill, db)
+
+    if result == 1:
+        return {
+            "code": 200,
+            "message": "success"
+        }
+    elif result == 0:
+        return {
+            "code": 5001,
+            "message": "the deletion operation in the database failed"
+        }
+    elif result == -1:
+        return {
+            "code": 401,
+            "message": "user does not exist"
+        }
+    elif result == -2:
+        return {
+            "code": 400,
+            "message": "the bill does not exist"
+        }
+    elif result == -3:
+        return {
+            "code": 401,
+            "meaage": "the user does not have such a bill"
+        }

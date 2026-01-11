@@ -262,3 +262,30 @@ def bill_update(bill: schemas.bill_update, db: Session):
     except Exception:
         # 数据库出错
         return 0
+
+
+# 用于删除账单
+def bill_delete(bill: schemas.bill_delete, db: Session):
+    stmt = select(User).where(User.id==bill.user_id)
+    user = db.scalar(stmt)
+
+    stmt = select(Bill).where(Bill.id==bill.bill_id)
+    target = db.scalar(stmt)
+
+    # 用户不存在
+    if user is None:
+        return -1
+    # 账单不存在
+    if target is None:
+        return -2
+    # 此账单不属于此用户
+    if target.user_id != bill.user_id:
+        return -3
+
+    # 尝试删除
+    try:
+        db.delete(target)
+        db.commit()
+        return 1
+    except Exception:
+        return 0

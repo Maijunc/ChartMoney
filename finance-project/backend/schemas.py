@@ -61,3 +61,9 @@ class bill_update(BaseModel):
     type: int = Field(..., ge=1, le=2)
     bill_time: datetime
     remark: str = Field(max_length=255)
+
+
+# 用于删除账单
+class bill_delete(BaseModel):
+    user_id: int = Field(..., ge=1)
+    bill_id: int = Field(..., ge=1)
