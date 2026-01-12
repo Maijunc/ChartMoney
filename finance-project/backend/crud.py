@@ -1,6 +1,7 @@
 from models import User, Bill_Category, Bill
 from sqlalchemy.orm import Session
-from sqlalchemy import select, update
+from sqlalchemy import select, update, desc, func
+from datetime import datetime
 import schemas
 
 """
@@ -289,3 +290,84 @@ def bill_delete(bill: schemas.bill_delete, db: Session):
         return 1
     except Exception:
         return 0
+
+
+# 用于获取账单
+def bill_list(user_id: int, the_time: str, page: int, db: Session):
+    # 先将字符串形式的时间转换为datetime形式
+    start_time = datetime.strptime(f"{the_time}-01", "%Y-%m-%d")
+    if start_time.month == 12:
+        end_time = start_time.replace(year=start_time.year + 1, month=1, day=1)
+    else:
+        end_time = start_time.replace(month=start_time.month + 1, day=1)
+
+    # 计算偏移量
+    skip = (page - 1) * 15
+
+    try:
+        stmt = select(
+            Bill.category_id,
+            Bill.id,
+            Bill_Category.name.label("name"),
+            Bill.amount,
+            Bill.type,
+            Bill.bill_time,
+            Bill.create_time,
+            Bill.update_time
+        ).join(Bill_Category, Bill.category_id == Bill_Category.id).where(
+            (Bill.user_id==user_id)&
+            (Bill.bill_time>=start_time)&
+            (Bill.bill_time<end_time)
+        ).order_by(desc(Bill.bill_time)).offset(skip).limit(15)
+        the_list = db.execute(stmt)
+    except Exception:
+        return 0
+
+    # 将查询结果转换为列表
+    result = []
+    for bill in the_list:
+        result.append({
+            "category_id": bill.category_id,
+            "bill_id": bill.id,
+            "name": bill.name,
+            "amount": bill.amount,
+            "type": bill.type,
+            "bill_time": bill.bill_time,
+            "create_time": bill.create_time,
+            "update_time": bill.update_time
+        })
+
+    return result
+
+
+# 用于获取账单记录条数和分页总数
+def get_bill_count(user_id: int, the_time: str, db: Session):
+
+    # 先将字符串形式的时间转换为datetime形式
+    start_time = datetime.strptime(f"{the_time}-01", "%Y-%m-%d")
+    if start_time.month == 12:
+        end_time = start_time.replace(year=start_time.year + 1, month=1, day=1)
+    else:
+        end_time = start_time.replace(month=start_time.month + 1, day=1)
+
+    # 统计符合条件的记录条数
+    try:
+        stmt = select(func.count(Bill.id)).where(
+            (Bill.user_id == user_id) &
+            (Bill.bill_time >= start_time) &
+            (Bill.bill_time < end_time)
+        )
+        num = db.scalar(stmt)
+    except Exception:
+        return -1
+
+    # 计算页面的数量
+    if num % 15 != 0:
+        page_num = (num // 15) + 1
+    else:
+        page_num = num // 15
+
+    return {
+        "total": num,
+        "page_num": page_num
+    }

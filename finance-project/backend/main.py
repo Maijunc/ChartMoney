@@ -277,3 +277,48 @@ def bill_delete(bill: schemas.bill_delete, db: Session = Depends(database.get_db
             "code": 401,
             "meaage": "the user does not have such a bill"
         }
+
+
+# 获取账单列表
+@app.get("/bill/list")
+def bill_list(user_id: int, the_time: str, page:int, db: Session = Depends(database.get_db)):
+    # 验证月份是否有效（1-12月）
+    try:
+        year_str, month_str = the_time.split('-')
+        year = int(year_str)
+        month = int(month_str)
+
+        if month < 1 or month > 12:
+            raise ValueError
+    except ValueError:
+        return {
+            "code": 400,
+            "message": "incorrect time format",
+            "data": []
+        }
+    temp = crud.get_bill_count(user_id, the_time, db)
+    total = temp["total"]
+    page_num = temp["page_num"]
+
+    if page < 1 or page > page_num:
+        return {
+            "code": 400,
+            "message": "page does not exit",
+            "data": []
+        }
+
+    result = crud.bill_list(user_id, the_time, page, db)
+    if result == 0:
+        return {
+            "code": 5001,
+            "message": "database error",
+            "data": []
+        }
+    else:
+        return {
+            "code": 200,
+            "message": "success",
+            "total": total,
+            "page_num": page_num,
+            "data": result
+        }
