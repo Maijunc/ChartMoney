@@ -80,10 +80,15 @@ def bill_category_add(category: schemas.category_add, db: Session = Depends(data
             "code": 5001,
             "message": "unable to be inserted into the database"
         }
-    elif result == -1 or result == -2:
+    elif result == -1:
+        return {
+            "code": 401,
+            "message": "don't have such user"
+        }
+    elif result == -2:
         return {
             "code": 400,
-            "message": "category already exist"
+            "message": "a category with the same name already exists"
         }
 
 
@@ -99,27 +104,27 @@ def bill_category_update(category: schemas.category_update, db: Session = Depend
     elif result == 0:
         return {
             "code": 5001,
-            "message": "unable to be inserted into the database"
+            "message": "failed to update database records"
         }
     elif result == -1:
         return {
-            "code": 404,
-            "message": "target category does not exist"
-        }
-    elif result == -2:
-        return {
             "code": 401,
-            "message": "can not revise a system preset category"
+            "message": "the user does not exist"
+        }
+    elif result == -2 or result == -4:
+        return {
+            "code": 400,
+            "message": "don't have such category"
         }
     elif result == -3:
         return {
             "code": 401,
-            "message": "can not revise other user's category"
+            "message": "the preset classification of the system cannot be modified"
         }
-    elif result == -4 or result == -5:
+    elif result == -5:
         return {
-            "code": 400,
-            "message": "category already exist"
+            "code": 401,
+            "message": "the same classification already exists, so this modification is ineffective"
         }
 
 

@@ -43,6 +43,7 @@ class Bill_Category(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)    # 外键（应可空）
     is_sys: Mapped[bool] = mapped_column(type_=Boolean, default=False, comment="是否是系统分类")
     name: Mapped[str] = mapped_column(type_=String(20), comment="分类名称", nullable=False)
+    type: Mapped[int] = mapped_column(type_=TINYINT, comment="1为收入分类，2为支出分类", nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="bill_categories", uselist=False)  # 一个账单分类对应一个用户
     bills: Mapped[List["Bill"]] = relationship(back_populates="bill_category")    # 一个账单分类对应多个账单
@@ -56,7 +57,6 @@ class Bill(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"))
     category_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("bill_category.id"))
     amount: Mapped[float] = mapped_column(DECIMAL(10, 2), nullable=False, comment="金额")
-    type: Mapped[int] = mapped_column(TINYINT, nullable=False, comment="1代表收入，2代表支出")
     remark: Mapped[str] = mapped_column(String(255), nullable=True, comment="账单备注")
     bill_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, comment="订单发生时间")
 
