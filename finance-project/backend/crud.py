@@ -293,7 +293,7 @@ def bill_delete(bill: schemas.bill_delete, db: Session):
 
 
 # 用于获取账单
-def bill_list(user_id: int, the_time: str, page: int, db: Session):
+def bill_list(user_id: int, the_time: str, page: int, page_size: int, db: Session):
     # 先将字符串形式的时间转换为datetime形式
     start_time = datetime.strptime(f"{the_time}-01", "%Y-%m-%d")
     if start_time.month == 12:
@@ -302,7 +302,7 @@ def bill_list(user_id: int, the_time: str, page: int, db: Session):
         end_time = start_time.replace(month=start_time.month + 1, day=1)
 
     # 计算偏移量
-    skip = (page - 1) * 15
+    skip = (page - 1) * page_size
 
     try:
         stmt = select(
@@ -318,7 +318,7 @@ def bill_list(user_id: int, the_time: str, page: int, db: Session):
             (Bill.user_id==user_id)&
             (Bill.bill_time>=start_time)&
             (Bill.bill_time<end_time)
-        ).order_by(desc(Bill.bill_time)).offset(skip).limit(15)
+        ).order_by(desc(Bill.bill_time)).offset(skip).limit(page_size)
         the_list = db.execute(stmt)
     except Exception:
         return 0
@@ -341,7 +341,7 @@ def bill_list(user_id: int, the_time: str, page: int, db: Session):
 
 
 # 用于获取账单记录条数和分页总数
-def get_bill_count(user_id: int, the_time: str, db: Session):
+def get_bill_count(user_id: int, the_time: str, page_size: int, db: Session):
 
     # 先将字符串形式的时间转换为datetime形式
     start_time = datetime.strptime(f"{the_time}-01", "%Y-%m-%d")
@@ -363,9 +363,9 @@ def get_bill_count(user_id: int, the_time: str, db: Session):
 
     # 计算页面的数量
     if num % 15 != 0:
-        page_num = (num // 15) + 1
+        page_num = (num // page_size) + 1
     else:
-        page_num = num // 15
+        page_num = num // page_size
 
     return {
         "total": num,
