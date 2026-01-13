@@ -67,3 +67,10 @@ class bill_update(BaseModel):
 class bill_delete(BaseModel):
     user_id: int = Field(..., ge=1)
     bill_id: int = Field(..., ge=1)
+
+class budget_add(BaseModel):
+    user_id: int = Field(..., ge=1)
+    category_id: int
+    is_total: bool
+    amount: float = Field(..., gt=0)
+    month: str = Field(..., min_length=7, max_length=7)

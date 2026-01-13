@@ -328,3 +328,40 @@ def bill_list(user_id: int, the_time: str, page:int, page_size: int, db: Session
             "page_num": page_num,
             "data": result
         }
+
+
+# 用于添加预算
+@app.post("/budget/add")
+def budget_add(budget: schemas.budget_add, db: Session = Depends(database.get_db)):
+    result = crud.budget_add(budget, db)
+
+    if result == 1:
+        return {
+            "code": 200,
+            "message": "success"
+        }
+    elif result == 0:
+        return {
+            "code": 5001,
+            "message": "database insertion failed"
+        }
+    elif result == -1:
+        return {
+            "code": 401,
+            "message": "user does not exist"
+        }
+    elif result == -2:
+        return {
+            "code": 401,
+            "message": "this category is invalid"
+        }
+    elif result == -3:
+        return {
+            "code": 400,
+            "message": "the data input is incorrect"
+        }
+    elif result == -4:
+        return {
+            "code": 400,
+            "message": "incorrect date format"
+        }
