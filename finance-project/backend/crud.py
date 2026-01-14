@@ -212,14 +212,12 @@ def category_list(user_id: int, type: int, db: Session):
 def bill_add(bill: schemas.bill_add, db: Session):
     stmt = select(User).where(User.id==bill.user_id)
     user = db.scalar(stmt)
-
     # 用户不存在
     if user is None:
         return -1
 
     stmt = select(Bill_Category).where(Bill_Category.id == bill.category_id)
     category = db.scalar(stmt)
-
     # 不是系统预设分类时，发现此分类不是该用户创建的分类
     if category.is_sys == False:
         if category.user_id != bill.user_id:
@@ -230,7 +228,6 @@ def bill_add(bill: schemas.bill_add, db: Session):
             user_id = bill.user_id,
             category_id = bill.category_id,
             amount = bill.amount,
-            type = bill.type,
             remark = bill.remark,
             bill_time = bill.bill_time
         )
@@ -274,7 +271,6 @@ def bill_update(bill: schemas.bill_update, db: Session):
         stmt = update(Bill).where(Bill.id==bill.bill_id).values(
             category_id=bill.category_id,
             amount=bill.amount,
-            type=bill.type,
             remark=bill.remark,
             bill_time=bill.bill_time
         )
@@ -290,13 +286,12 @@ def bill_update(bill: schemas.bill_update, db: Session):
 def bill_delete(bill: schemas.bill_delete, db: Session):
     stmt = select(User).where(User.id==bill.user_id)
     user = db.scalar(stmt)
-
-    stmt = select(Bill).where(Bill.id==bill.bill_id)
-    target = db.scalar(stmt)
-
     # 用户不存在
     if user is None:
         return -1
+
+    stmt = select(Bill).where(Bill.id==bill.bill_id)
+    target = db.scalar(stmt)
     # 账单不存在
     if target is None:
         return -2
