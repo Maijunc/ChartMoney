@@ -309,7 +309,7 @@ def bill_delete(bill: schemas.bill_delete, db: Session):
 
 
 # 用于获取账单
-def bill_list(user_id: int, the_time: str, page: int, page_size: int, db: Session):
+def bill_list(user_id: int, the_time: str, page: int, page_size: int, type: int, db: Session):
     # 先将字符串形式的时间转换为datetime形式
     start_time = datetime.strptime(f"{the_time}-01", "%Y-%m-%d")
     if start_time.month == 12:
@@ -325,15 +325,16 @@ def bill_list(user_id: int, the_time: str, page: int, page_size: int, db: Sessio
             Bill.category_id,
             Bill.id,
             Bill_Category.name.label("name"),
+            Bill_Category.type.label("type"),
             Bill.amount,
-            Bill.type,
             Bill.bill_time,
             Bill.create_time,
             Bill.update_time
         ).join(Bill_Category, Bill.category_id == Bill_Category.id).where(
             (Bill.user_id==user_id)&
             (Bill.bill_time>=start_time)&
-            (Bill.bill_time<end_time)
+            (Bill.bill_time<end_time)&
+            (Bill_Category.type==type)
         ).order_by(desc(Bill.bill_time)).offset(skip).limit(page_size)
         the_list = db.execute(stmt)
     except Exception:
@@ -357,7 +358,7 @@ def bill_list(user_id: int, the_time: str, page: int, page_size: int, db: Sessio
 
 
 # 用于获取账单记录条数和分页总数
-def get_bill_count(user_id: int, the_time: str, page_size: int, db: Session):
+def get_bill_count(user_id: int, the_time: str, page_size: int, type: int, db: Session):
 
     # 先将字符串形式的时间转换为datetime形式
     start_time = datetime.strptime(f"{the_time}-01", "%Y-%m-%d")
@@ -368,10 +369,11 @@ def get_bill_count(user_id: int, the_time: str, page_size: int, db: Session):
 
     # 统计符合条件的记录条数
     try:
-        stmt = select(func.count(Bill.id)).where(
+        stmt = select(func.count(Bill.id)).join(Bill_Category, Bill.category_id==Bill_Category.id).where(
             (Bill.user_id == user_id) &
             (Bill.bill_time >= start_time) &
-            (Bill.bill_time < end_time)
+            (Bill.bill_time < end_time) &
+            (Bill_Category.type == type)
         )
         num = db.scalar(stmt)
     except Exception:

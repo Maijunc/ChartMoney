@@ -299,8 +299,14 @@ def bill_delete(bill: schemas.bill_delete, db: Session = Depends(database.get_db
 
 # 获取账单列表
 @app.get("/bill/list")
-def bill_list(user_id: int, the_time: str, page:int, page_size: int, db: Session = Depends(database.get_db)):
+def bill_list(user_id: int, the_time: str, page:int, page_size: int, type: int, db: Session = Depends(database.get_db)):
     if page_size <15:
+        return {
+            "code": 400,
+            "message": "abnormal page size",
+            "data": []
+        }
+    if type not in [1, 2]:
         return {
             "code": 400,
             "message": "abnormal page size",
@@ -320,7 +326,7 @@ def bill_list(user_id: int, the_time: str, page:int, page_size: int, db: Session
             "message": "incorrect time format",
             "data": []
         }
-    temp = crud.get_bill_count(user_id, the_time, page_size, db)
+    temp = crud.get_bill_count(user_id, the_time, page_size, type, db)
     total = temp["total"]
     page_num = temp["page_num"]
 
@@ -331,7 +337,7 @@ def bill_list(user_id: int, the_time: str, page:int, page_size: int, db: Session
             "data": []
         }
 
-    result = crud.bill_list(user_id, the_time, page, page_size, db)
+    result = crud.bill_list(user_id, the_time, page, page_size, type, db)
     if result == 0:
         return {
             "code": 5001,
