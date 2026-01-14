@@ -158,20 +158,29 @@ def category_delete(category: schemas.category_delete, db: Session):
 
 
 # 用于获取用户的账单分类列表
-def category_list(user_id: int, db: Session):
+def category_list(user_id: int, type: int, db: Session):
     # 先查看传入的用户id是否存在
     stmt = select(User).where(User.id == user_id)
     check = db.scalar(stmt)
     if check is None:
+        return -1
+
+    try:
+        # 获取系统预设分类(需要使用scalars)
+        stmt = select(Bill_Category).where(
+            (Bill_Category.is_sys == True) &
+            (Bill_Category.type == type)
+        )
+        sys_category = db.scalars(stmt).all()
+
+        # 获取用户自定义的分类
+        stmt = select(Bill_Category).where(
+            (Bill_Category.user_id == user_id) &
+            (Bill_Category.type == type)
+        )
+        user_category = db.scalars(stmt).all()
+    except Exception:
         return 0
-
-    # 获取系统预设分类(需要使用scalars)
-    stmt = select(Bill_Category).where(Bill_Category.is_sys == True)
-    sys_category = db.scalars(stmt).all()
-
-    # 获取用户自定义的分类
-    stmt = select(Bill_Category).where(Bill_Category.user_id == user_id)
-    user_category = db.scalars(stmt).all()
 
     result_list = []
 
@@ -181,6 +190,7 @@ def category_list(user_id: int, db: Session):
             "user_id": category.user_id,
             "is_sys": category.is_sys,
             "name": category.name,
+            "type": category.type,
             "create_time": category.create_time,
             "update_time": category.update_time
         })
@@ -190,6 +200,7 @@ def category_list(user_id: int, db: Session):
             "user_id": category.user_id,
             "is_sys": category.is_sys,
             "name": category.name,
+            "type": category.type,
             "create_time": category.create_time,
             "update_time": category.update_time
         })

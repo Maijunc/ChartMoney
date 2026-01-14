@@ -167,9 +167,22 @@ def bill_category_delete(category: schemas.category_delete, db: Session = Depend
 
 # 获取账单分类列表
 @app.get("/category/list")
-def bill_category_list(user_id: int, db: Session = Depends(database.get_db)):
-    result = crud.category_list(user_id, db)
+def bill_category_list(user_id: int, type: int, db: Session = Depends(database.get_db)):
+    if type not in [1, 2]:
+        return {
+            "code": "400",
+            "message": "incorrect input of income and expenditure types",
+            "data": []
+        }
+
+    result = crud.category_list(user_id, type, db)
     if result == 0:
+        return {
+            "code": "5001",
+            "message": "error occurred while querying the database",
+            "data": []
+        }
+    elif result == -1:
         return {
             "code": "401",
             "message": "user does not exist",
