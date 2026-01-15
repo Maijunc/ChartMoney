@@ -406,10 +406,15 @@ def budget_add(budget: schemas.budget_add, db: Session = Depends(database.get_db
         }
     elif result == -6:
         return {
-            "code": 5001,
-            "message": "the same type of budget for that month already exists"
+            "code": 400,
+            "message": "A revenue category cannot be set with a budget."
         }
     elif result == -7:
+        return {
+            "code": 400,
+            "message": "the same type of budget for that month already exists"
+        }
+    elif result == -8:
         return {
             "code": 5001,
             "message": "The total of all the monthly budgets has exceeded the monthly overall budget. This budget "
@@ -488,4 +493,34 @@ def budget_update(budget: schemas.budget_update, db: Session = Depends(database.
             "code": 5001,
             "message": "The revised monthly total budget is less than the budgets of each category. This modification "
                        "was rejected"
+        }
+
+
+@app.get("/budget/list_month")
+def budget_list_month(user_id: int, month: str, db: Session = Depends(database.get_db)):
+    result = crud.budget_list_month(user_id, month, db)
+
+    if result == 0:
+        return {
+            "code": 5001,
+            "message": "an error occurred while accessing the database",
+            "data": []
+        }
+    elif result == -1:
+        return {
+            "code": 401,
+            "message": "User does not exist",
+            "data": []
+        }
+    elif result == -2:
+        return {
+            "code": 400,
+            "message": "incorrect date format",
+            "data": []
+        }
+    else:
+        return {
+            "code": 200,
+            "message": "success",
+            "data": result
         }

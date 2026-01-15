@@ -410,6 +410,8 @@ def budget_add(budget: schemas.budget_add, db: Session):
             # 分类不存在
             if category is None:
                 return -5
+            if category.type == 1:
+                return -6
         except Exception:
             return 0
 
@@ -422,7 +424,7 @@ def budget_add(budget: schemas.budget_add, db: Session):
             check = db.scalar(stmt)
             # 当月已存在同类预算
             if check is not None:
-                return -6
+                return -7
         except Exception:
             return 0
 
@@ -438,7 +440,7 @@ def budget_add(budget: schemas.budget_add, db: Session):
             total = Decimal(budget.amount) + check
             # 发现当月各类预算之和已经超出月度总预算，不允许创建这个预算，需要先修改月度总预算
             if total > total_budget.amount:
-                return -7
+                return -8
         except Exception:
             return 0
     else:
@@ -451,7 +453,7 @@ def budget_add(budget: schemas.budget_add, db: Session):
             check = db.scalar(stmt)
             # 当月已存在同类预算
             if check is not None:
-                return -6
+                return -7
         except Exception:
             return 0
 
@@ -587,3 +589,66 @@ def budget_update(budget: schemas.budget_update, db: Session):
         return 1
     except Exception:
         return 0
+
+
+# 用于获取某月的预算列表
+def budget_list_month(user_id: int, month: str, db: Session):
+    stmt = select(User).where(User.id==user_id)
+    try:
+        user = db.scalar(stmt)
+        # 用户不存在
+        if user is None:
+            return -1
+    except Exception:
+        return 0
+
+    try:
+        # 验证month的输入是否合法，如果合法则一定可以转换成为datetime
+        start_time = datetime.strptime(f"{month}-01", "%Y-%m-%d")
+    except Exception:
+        return -2
+
+    stmt = select(
+        Budget.id,
+        Budget.category_id,
+        Budget.is_total,
+        Bill_Category.name.label("name"),
+        Budget.amount,
+        Budget.month,
+        Budget.create_time,
+        Budget.update_time
+    ).join(Bill_Category, Bill_Category.id==Budget.category_id, isouter=True).where(
+        (Budget.user_id == user_id) &
+        (Budget.month == month)
+    )
+    try:
+        result_list = db.execute(stmt).all()
+    except Exception:
+        return 0
+
+    result = []
+    for record in result_list:
+        if record.is_total==False:
+            result.append({
+                "id": record.id,
+                "category_id": record.category_id,
+                "is_total": record.is_total,
+                "name": record.name,
+                "amount": record.amount,
+                "month": record.month,
+                "create_time": record.create_time,
+                "update_time": record.update_time
+            })
+        else:
+            result.append({
+                "id": record.id,
+                "category_id": record.category_id,
+                "is_total": record.is_total,
+                "name": "本月总预算",
+                "amount": record.amount,
+                "month": record.month,
+                "create_time": record.create_time,
+                "update_time": record.update_time
+            })
+
+    return result
