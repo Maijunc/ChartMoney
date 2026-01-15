@@ -31,7 +31,6 @@ class User(Base):   # 用户表的模型类
     phone: Mapped[str] = mapped_column(type_=String(11), comment="电话号码", nullable=False, unique=True)
     avatar: Mapped[str] = mapped_column(type_=String(255), comment="头像地址", nullable=True)
 
-    bill_categories: Mapped[List["Bill_Category"]] = relationship(back_populates="user")    # 一个用户对应多个分类，使用List
     bills: Mapped[List["Bill"]] = relationship(back_populates="user")   # 一个用户对应多个账单
     budgets: Mapped[List["Budget"]] = relationship(back_populates="user")   # 一个用户对应多个预算
 
@@ -43,7 +42,6 @@ class Bill_Category(Base):
     name: Mapped[str] = mapped_column(type_=String(20), comment="分类名称", nullable=False)
     type: Mapped[int] = mapped_column(type_=TINYINT, comment="1为收入分类，2为支出分类", nullable=False)
 
-    user: Mapped["User"] = relationship(back_populates="bill_categories", uselist=False)  # 一个账单分类对应一个用户
     bills: Mapped[List["Bill"]] = relationship(back_populates="bill_category")    # 一个账单分类对应多个账单
     budgets: Mapped[List["Budget"]] = relationship(back_populates="bill_category")  # 一个账单分类对应多个预算
 

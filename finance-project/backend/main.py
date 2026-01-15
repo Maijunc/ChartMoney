@@ -167,7 +167,7 @@ def user_resgister(user: schemas.User_register, db: Session = Depends(database.g
 
 # 获取账单分类列表
 @app.get("/category/list")
-def bill_category_list(user_id: int, type: int, db: Session = Depends(database.get_db)):
+def bill_category_list(type: int, db: Session = Depends(database.get_db)):
     if type not in [1, 2]:
         return {
             "code": "400",
@@ -175,17 +175,11 @@ def bill_category_list(user_id: int, type: int, db: Session = Depends(database.g
             "data": []
         }
 
-    result = crud.category_list(user_id, type, db)
+    result = crud.category_list(type, db)
     if result == 0:
         return {
             "code": "5001",
             "message": "error occurred while querying the database",
-            "data": []
-        }
-    elif result == -1:
-        return {
-            "code": "401",
-            "message": "user does not exist",
             "data": []
         }
     else:
