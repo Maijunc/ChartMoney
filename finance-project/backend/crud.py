@@ -9,6 +9,7 @@ import schemas
 本模块主要负责进行对数据库的增删改查
 """
 
+
 # 用于用户登录时，查看用户名和密码是否正确，正确就会返回True
 def user_login(user: schemas.User, db: Session):
     result = db.execute(select(User).where((User.username == user.username)))
@@ -27,19 +28,19 @@ def user_register(user: schemas.User_register, db: Session):
     check = db.execute(select(User).where((User.username == user.username)))
     check = check.scalar_one_or_none()
     if check is not None:
-        return -1   # 用户名已存在
+        return -1  # 用户名已存在
 
     check = db.execute(select(User).where((User.phone == user.phone)))
     check = check.scalar_one_or_none()
     if check is not None:
-        return -2   # 改手机号已被注册
+        return -2  # 改手机号已被注册
 
     # 创建要添加到数据库中的用户
     user = User(username=user.username, phone=user.phone, password=user.password)
 
     # 添加到数据库中并提交事务
     try:
-        db.add(user)    # 因为user是User模型类，所以add直接会将其添加到user表中
+        db.add(user)  # 因为user是User模型类，所以add直接会将其添加到user表中
         db.commit()
         return 1
     except Exception:
@@ -184,7 +185,7 @@ def category_list(type: int, db: Session):
 
 # 用于创建账单
 def bill_add(bill: schemas.bill_add, db: Session):
-    stmt = select(User).where(User.id==bill.user_id)
+    stmt = select(User).where(User.id == bill.user_id)
     user = db.scalar(stmt)
     # 用户不存在
     if user is None:
@@ -198,11 +199,11 @@ def bill_add(bill: schemas.bill_add, db: Session):
 
     try:
         new_bill = Bill(
-            user_id = bill.user_id,
-            category_id = bill.category_id,
-            amount = bill.amount,
-            remark = bill.remark,
-            bill_time = bill.bill_time
+            user_id=bill.user_id,
+            category_id=bill.category_id,
+            amount=bill.amount,
+            remark=bill.remark,
+            bill_time=bill.bill_time
         )
         db.add(new_bill)
         db.commit()
@@ -213,13 +214,13 @@ def bill_add(bill: schemas.bill_add, db: Session):
 
 # 用于修改账单
 def bill_update(bill: schemas.bill_update, db: Session):
-    stmt = select(User).where(User.id==bill.user_id)
+    stmt = select(User).where(User.id == bill.user_id)
     user = db.scalar(stmt)
 
-    stmt = select(Bill_Category).where(Bill_Category.id==bill.category_id)
+    stmt = select(Bill_Category).where(Bill_Category.id == bill.category_id)
     category = db.scalar(stmt)
 
-    stmt = select(Bill).where(Bill.id==bill.bill_id)
+    stmt = select(Bill).where(Bill.id == bill.bill_id)
     target = db.scalar(stmt)
 
     # 用户不存在
@@ -237,7 +238,7 @@ def bill_update(bill: schemas.bill_update, db: Session):
 
     try:
         # 尝试修改数据库
-        stmt = update(Bill).where(Bill.id==bill.bill_id).values(
+        stmt = update(Bill).where(Bill.id == bill.bill_id).values(
             category_id=bill.category_id,
             amount=bill.amount,
             remark=bill.remark,
@@ -253,13 +254,13 @@ def bill_update(bill: schemas.bill_update, db: Session):
 
 # 用于删除账单
 def bill_delete(bill: schemas.bill_delete, db: Session):
-    stmt = select(User).where(User.id==bill.user_id)
+    stmt = select(User).where(User.id == bill.user_id)
     user = db.scalar(stmt)
     # 用户不存在
     if user is None:
         return -1
 
-    stmt = select(Bill).where(Bill.id==bill.bill_id)
+    stmt = select(Bill).where(Bill.id == bill.bill_id)
     target = db.scalar(stmt)
     # 账单不存在
     if target is None:
@@ -301,10 +302,10 @@ def bill_list(user_id: int, the_time: str, page: int, page_size: int, type: int,
             Bill.create_time,
             Bill.update_time
         ).join(Bill_Category, Bill.category_id == Bill_Category.id).where(
-            (Bill.user_id==user_id)&
-            (Bill.bill_time>=start_time)&
-            (Bill.bill_time<end_time)&
-            (Bill_Category.type==type)
+            (Bill.user_id == user_id) &
+            (Bill.bill_time >= start_time) &
+            (Bill.bill_time < end_time) &
+            (Bill_Category.type == type)
         ).order_by(desc(Bill.bill_time)).offset(skip).limit(page_size)
         the_list = db.execute(stmt)
     except Exception:
@@ -344,7 +345,7 @@ def get_bill_count(user_id: int, the_time: str, page_size: int, type: int, db: S
 
     # 统计符合条件的记录条数
     try:
-        stmt = select(func.count(Bill.id)).join(Bill_Category, Bill.category_id==Bill_Category.id).where(
+        stmt = select(func.count(Bill.id)).join(Bill_Category, Bill.category_id == Bill_Category.id).where(
             (Bill.user_id == user_id) &
             (Bill.bill_time >= start_time) &
             (Bill.bill_time < end_time) &
@@ -369,7 +370,7 @@ def get_bill_count(user_id: int, the_time: str, page_size: int, type: int, db: S
 # 用于添加预算
 def budget_add(budget: schemas.budget_add, db: Session):
     # 值输入的有问题
-    if budget.is_total==True and budget.category_id != 0:
+    if budget.is_total == True and budget.category_id != 0:
         return -1
     if budget.is_total == False and budget.category_id == 0:
         return -1
@@ -381,7 +382,7 @@ def budget_add(budget: schemas.budget_add, db: Session):
         return -2
 
     try:
-        stmt = select(User).where(User.id==budget.user_id)
+        stmt = select(User).where(User.id == budget.user_id)
         user = db.scalar(stmt)
         # 用户不存在
         if user is None:
@@ -392,9 +393,9 @@ def budget_add(budget: schemas.budget_add, db: Session):
     if budget.is_total is False:
         try:
             stmt = select(Budget).where(
-                (Budget.user_id==budget.user_id)&
-                (Budget.month==budget.month)&
-                (Budget.is_total==True)
+                (Budget.user_id == budget.user_id) &
+                (Budget.month == budget.month) &
+                (Budget.is_total == True)
             )
             total_budget = db.scalar(stmt)
             # 用户尚未设置月度总预算，此时不允许设置细分类目的预算
@@ -404,7 +405,7 @@ def budget_add(budget: schemas.budget_add, db: Session):
             return 0
 
         try:
-            stmt = select(Bill_Category).where((Bill_Category.id==budget.category_id))
+            stmt = select(Bill_Category).where((Bill_Category.id == budget.category_id))
             category = db.scalar(stmt)
             # 分类不存在
             if category is None:
@@ -458,11 +459,11 @@ def budget_add(budget: schemas.budget_add, db: Session):
     try:
         if budget.is_total == False:
             new_budget = Budget(
-                user_id = budget.user_id,
-                category_id = budget.category_id,
-                is_total = budget.is_total,
-                amount = budget.amount,
-                month = budget.month
+                user_id=budget.user_id,
+                category_id=budget.category_id,
+                is_total=budget.is_total,
+                amount=budget.amount,
+                month=budget.month
             )
         else:
             new_budget = Budget(
@@ -490,7 +491,7 @@ def budget_delete(budget: schemas.budget_delete, db: Session):
     if user is None:
         return -1
 
-    stmt = select(Budget).where(Budget.id==budget.budget_id)
+    stmt = select(Budget).where(Budget.id == budget.budget_id)
     try:
         target = db.scalar(stmt)
     except Exception:
@@ -518,6 +519,71 @@ def budget_delete(budget: schemas.budget_delete, db: Session):
     # 对目标记录进行删除
     try:
         db.delete(target)
+        return 1
+    except Exception:
+        return 0
+
+
+# 用于修改预算（只能修改amount）
+def budget_update(budget: schemas.budget_update, db: Session):
+    stmt = select(User).where(User.id == budget.user_id)
+    try:
+        user = db.scalar(stmt)
+    except Exception:
+        return 0
+    # 用户不存在
+    if user is None:
+        return -1
+
+    stmt = select(Budget).where(Budget.id == budget.budget_id)
+    try:
+        target = db.scalar(stmt)
+    except Exception:
+        return 0
+    # 预算不存在
+    if target is None:
+        return -2
+
+    # 该预算不属于此用户
+    if target.user_id != budget.user_id:
+        return -3
+
+    delta_amount = Decimal(str(budget.amount)) - target.amount
+    stmt1 = select(Budget).where(
+        (Budget.user_id == budget.user_id) &
+        (Budget.month == target.month) &
+        (Budget.is_total == True)
+    )
+    stmt2 = select(func.sum(Budget.amount)).where(
+        (Budget.user_id == budget.user_id) &
+        (Budget.month == target.month) &
+        (Budget.is_total == False)
+    )
+    try:
+        month_total = db.scalar(stmt1)
+        # 执行到这里但是发现月度总预算居然不存在，则数据库中必定出现了数据异常
+        if month_total is None:
+            return -4
+        month_total = month_total.amount
+        category_total = db.scalar(stmt2)
+        if category_total is None:
+            category_total = Decimal('0')
+    except Exception:
+        return 0
+    if target.is_total == True:
+        month_total += delta_amount
+    else:
+        category_total += delta_amount
+    # 如果修改后的分类总预算和月度总预算出错，不能修改
+    if month_total < category_total:
+        return -5
+
+    # 校验完成之后，进行真正修改
+    try:
+        stmt = update(Budget).where(Budget.id==budget.budget_id).values(
+            amount = budget.amount
+        )
+        db.execute(stmt)
         return 1
     except Exception:
         return 0

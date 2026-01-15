@@ -447,3 +447,45 @@ def budget_delete(budget: schemas.budget_delete, db: Session = Depends(database.
             "code": 401,
             "message": "the user doesn't have such budget"
         }
+
+
+@app.put("/budget/update")
+def budget_update(budget: schemas.budget_update, db: Session = Depends(database.get_db)):
+    result = crud.budget_update(budget, db)
+
+    if result == 1:
+        return {
+            "code": 200,
+            "message": "success"
+        }
+    elif result == 0:
+        return {
+            "code": 5001,
+            "message": "an error occurred while accessing the database"
+        }
+    elif result == -1:
+        return {
+            "code": 401,
+            "message": "user does not exist"
+        }
+    elif result == -2:
+        return {
+            "code": 400,
+            "message": "don't have such budget"
+        }
+    elif result == -3:
+        return {
+            "code": 401,
+            "message": "The target budget does not belong to this user"
+        }
+    elif result == -4:
+        return {
+            "code": 5001,
+            "message": "There has been a serious error in the data stored in the database"
+        }
+    elif result == -5:
+        return {
+            "code": 5001,
+            "message": "The revised monthly total budget is less than the budgets of each category. This modification "
+                       "was rejected"
+        }

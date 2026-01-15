@@ -82,3 +82,10 @@ class budget_add(BaseModel):
 class budget_delete(BaseModel):
     user_id: int = Field(..., ge=1)
     budget_id: int = Field(..., ge=1)
+
+
+# 用于修改预算
+class budget_update(BaseModel):
+    user_id: int = Field(..., ge=1)
+    budget_id: int = Field(..., ge=1)
+    amount: float = Field(..., gt=0)
