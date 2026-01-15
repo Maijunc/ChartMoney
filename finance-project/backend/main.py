@@ -171,7 +171,7 @@ def bill_category_list(type: int, db: Session = Depends(database.get_db)):
     if type not in [1, 2]:
         return {
             "code": "400",
-            "message": "incorrect input of income and expenditure types",
+            "message": "incorrect input of types",
             "data": []
         }
 
@@ -203,7 +203,7 @@ def bill_add(bill: schemas.bill_add, db: Session = Depends(database.get_db)):
     elif result == 0:
         return {
             "code": 5001,
-            "message": "unable to be inserted into the database"
+            "message": "an error occurred while accessing the database"
         }
     elif result == -1:
         return {
@@ -230,7 +230,7 @@ def bill_update(bill: schemas.bill_update, db: Session = Depends(database.get_db
     elif result == 0:
         return {
             "code": 5001,
-            "message": "failed to modify the database"
+            "message": "an error occurred while accessing the database"
         }
     elif result == -1:
         return {
@@ -267,7 +267,7 @@ def bill_delete(bill: schemas.bill_delete, db: Session = Depends(database.get_db
     elif result == 0:
         return {
             "code": 5001,
-            "message": "the deletion operation in the database failed"
+            "message": "an error occurred while accessing the database"
         }
     elif result == -1:
         return {
