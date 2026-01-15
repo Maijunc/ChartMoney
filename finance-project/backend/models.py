@@ -40,7 +40,6 @@ class Bill_Category(Base):
     __tablename__ = "bill_category"
 
     id: Mapped[int] = mapped_column(type_=BigInteger ,primary_key=True, comment="分类id", autoincrement=True)
-    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)    # 外键（应可空）
     name: Mapped[str] = mapped_column(type_=String(20), comment="分类名称", nullable=False)
     type: Mapped[int] = mapped_column(type_=TINYINT, comment="1为收入分类，2为支出分类", nullable=False)
 
