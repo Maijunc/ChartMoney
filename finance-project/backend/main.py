@@ -376,25 +376,42 @@ def budget_add(budget: schemas.budget_add, db: Session = Depends(database.get_db
     elif result == 0:
         return {
             "code": 5001,
-            "message": "database insertion failed"
+            "message": "an error occurred while accessing the database"
         }
     elif result == -1:
-        return {
-            "code": 401,
-            "message": "user does not exist"
-        }
-    elif result == -2:
-        return {
-            "code": 401,
-            "message": "this category is invalid"
-        }
-    elif result == -3:
         return {
             "code": 400,
             "message": "the data input is incorrect"
         }
-    elif result == -4:
+    elif result == -2:
         return {
             "code": 400,
             "message": "incorrect date format"
+        }
+    elif result == -3:
+        return {
+            "code": 401,
+            "message": "the user does not exist"
+        }
+    elif result == -4:
+        return {
+            "code": 400,
+            "message": "The monthly overall budget has not been set yet. It is necessary to set the monthly overall "
+                       "budget first"
+        }
+    elif result == -5:
+        return {
+            "code": 400,
+            "message": "don't have such category"
+        }
+    elif result == -6:
+        return {
+            "code": 5001,
+            "message": "the same type of budget for that month already exists"
+        }
+    elif result == -7:
+        return {
+            "code": 5001,
+            "message": "The total of all the monthly budgets has exceeded the monthly overall budget. This budget "
+                       "cannot be created. It is necessary to first modify the monthly overall budget."
         }

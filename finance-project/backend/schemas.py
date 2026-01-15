@@ -75,4 +75,3 @@ class budget_add(BaseModel):
     is_total: bool
     amount: float = Field(..., gt=0)
     month: str = Field(..., min_length=7, max_length=7)
-    month: str = Field(..., min_length=7, max_length=7)

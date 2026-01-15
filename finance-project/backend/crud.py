@@ -2,6 +2,7 @@ from models import User, Bill_Category, Bill, Budget
 from sqlalchemy.orm import Session
 from sqlalchemy import select, update, desc, func
 from datetime import datetime
+from decimal import Decimal
 import schemas
 
 """
@@ -367,46 +368,111 @@ def get_bill_count(user_id: int, the_time: str, page_size: int, type: int, db: S
 
 # 用于添加预算
 def budget_add(budget: schemas.budget_add, db: Session):
-    if budget.is_total==True and budget.category_id is not None:
-        return -3
-
-    stmt = select(User).where(User.id==budget.user_id)
-    user = db.scalar(stmt)
-    # 用户不存在
-    if user is None:
+    # 值输入的有问题
+    if budget.is_total==True and budget.category_id != 0:
         return -1
-
-    if budget.is_total is False:
-        try:
-            stmt = select(Bill_Category).where((Bill_Category.id==budget.category_id))
-            category = db.scalar(stmt)
-            # 分类存在，但是此分类不属于该用户
-            if category.is_sys==False and category.user_id !=budget.user_id:
-                return -2
-        except Exception:
-            # 如果前端输入的值有问题，比如说is_total是False，但是category_id是空，就会引起这个异常结果
-            return -3
+    if budget.is_total == False and budget.category_id == 0:
+        return -1
 
     try:
         # 验证month的输入是否合法，如果合法则一定可以转换成为datetime
         start_time = datetime.strptime(f"{budget.month}-01", "%Y-%m-%d")
-        if start_time.month == 12:
-            end_time = start_time.replace(year=start_time.year + 1, month=1, day=1)
-        else:
-            end_time = start_time.replace(month=start_time.month + 1, day=1)
     except Exception:
-        return -4
+        return -2
 
     try:
-        new_budget = Budget(
-            user_id = budget.user_id,
-            category_id = budget.category_id,
-            is_total = budget.is_total,
-            amount = budget.amount,
-            month = budget.month
-        )
+        stmt = select(User).where(User.id==budget.user_id)
+        user = db.scalar(stmt)
+        # 用户不存在
+        if user is None:
+            return -3
+    except Exception:
+        return 0
+
+    if budget.is_total is False:
+        try:
+            stmt = select(Budget).where(
+                (Budget.user_id==budget.user_id)&
+                (Budget.month==budget.month)&
+                (Budget.is_total==True)
+            )
+            total_budget = db.scalar(stmt)
+            # 用户尚未设置月度总预算，此时不允许设置细分类目的预算
+            if total_budget is None:
+                return -4
+        except Exception:
+            return 0
+
+        try:
+            stmt = select(Bill_Category).where((Bill_Category.id==budget.category_id))
+            category = db.scalar(stmt)
+            # 分类不存在
+            if category is None:
+                return -5
+        except Exception:
+            return 0
+
+        try:
+            stmt = select(Budget).where(
+                (Budget.user_id == budget.user_id) &
+                (Budget.month == budget.month) &
+                (Budget.category_id == budget.category_id)
+            )
+            check = db.scalar(stmt)
+            # 当月已存在同类预算
+            if check is not None:
+                return -6
+        except Exception:
+            return 0
+
+        try:
+            stmt = select(func.sum(Budget.amount)).where(
+                (Budget.user_id == budget.user_id) &
+                (Budget.month == budget.month) &
+                (Budget.is_total == False)
+            )
+            check = db.scalar(stmt)
+            if check is None:
+                check = Decimal('0')
+            total = Decimal(budget.amount) + check
+            # 发现当月各类预算之和已经超出月度总预算，不允许创建这个预算，需要先修改月度总预算
+            if total > total_budget.amount:
+                return -7
+        except Exception:
+            return 0
+    else:
+        try:
+            stmt = select(Budget).where(
+                (Budget.user_id == budget.user_id) &
+                (Budget.month == budget.month) &
+                (Budget.is_total == True)
+            )
+            check = db.scalar(stmt)
+            # 当月已存在同类预算
+            if check is not None:
+                return -6
+        except Exception:
+            return 0
+
+    # 一切校验完成，才允许创建这个预算
+    try:
+        if budget.is_total == False:
+            new_budget = Budget(
+                user_id = budget.user_id,
+                category_id = budget.category_id,
+                is_total = budget.is_total,
+                amount = budget.amount,
+                month = budget.month
+            )
+        else:
+            new_budget = Budget(
+                user_id=budget.user_id,
+                is_total=budget.is_total,
+                amount=budget.amount,
+                month=budget.month
+            )
         db.add(new_budget)
-        db.commit()
+        # db.commit()
         return 1
     except Exception:
         # 尝试添加时发生数据库错误
