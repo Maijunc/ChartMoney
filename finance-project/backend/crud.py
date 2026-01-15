@@ -191,10 +191,9 @@ def bill_add(bill: schemas.bill_add, db: Session):
 
     stmt = select(Bill_Category).where(Bill_Category.id == bill.category_id)
     category = db.scalar(stmt)
-    # 不是系统预设分类时，发现此分类不是该用户创建的分类
-    if category.is_sys == False:
-        if category.user_id != bill.user_id:
-            return -2
+    # 分类不存在
+    if category is None:
+        return -2
 
     try:
         new_bill = Bill(
@@ -231,13 +230,9 @@ def bill_update(bill: schemas.bill_update, db: Session):
     # 账单不存在
     if target is None:
         return -3
-    # 此分类不属于这个用户
-    if category.is_sys == False:
-        if category.user_id != bill.user_id:
-            return -4
     # 此账单不属于这个用户
     if target.user_id != bill.user_id:
-        return -5
+        return -4
 
     try:
         # 尝试修改数据库
@@ -300,6 +295,7 @@ def bill_list(user_id: int, the_time: str, page: int, page_size: int, type: int,
             Bill_Category.name.label("name"),
             Bill_Category.type.label("type"),
             Bill.amount,
+            Bill.remark,
             Bill.bill_time,
             Bill.create_time,
             Bill.update_time
@@ -321,6 +317,7 @@ def bill_list(user_id: int, the_time: str, page: int, page_size: int, type: int,
             "bill_id": bill.id,
             "name": bill.name,
             "amount": bill.amount,
+            "remark": bill.remark,
             "type": bill.type,
             "bill_time": bill.bill_time,
             "create_time": bill.create_time,
@@ -332,6 +329,10 @@ def bill_list(user_id: int, the_time: str, page: int, page_size: int, type: int,
 
 # 用于获取账单记录条数和分页总数
 def get_bill_count(user_id: int, the_time: str, page_size: int, type: int, db: Session):
+    stmt = select(User.id).where(User.id == user_id)
+    check = db.scalar(stmt)
+    if check is None:
+        return -1
 
     # 先将字符串形式的时间转换为datetime形式
     start_time = datetime.strptime(f"{the_time}-01", "%Y-%m-%d")
@@ -350,7 +351,7 @@ def get_bill_count(user_id: int, the_time: str, page_size: int, type: int, db: S
         )
         num = db.scalar(stmt)
     except Exception:
-        return -1
+        return 0
 
     # 计算页面的数量
     if num % 15 != 0:

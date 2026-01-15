@@ -213,7 +213,7 @@ def bill_add(bill: schemas.bill_add, db: Session = Depends(database.get_db)):
     elif result == -2:
         return {
             "code": 401,
-            "message": "category does not exist, the user does not have such category"
+            "message": "category does not exist"
         }
 
 
@@ -248,11 +248,6 @@ def bill_update(bill: schemas.bill_update, db: Session = Depends(database.get_db
             "message": "the bill does not exist"
         }
     elif result == -4:
-        return {
-            "code": 401,
-            "message": "this user does not have such a category"
-        }
-    elif result == -5:
         return {
             "code": 401,
             "message": "this user does not have such a bill"
@@ -321,8 +316,28 @@ def bill_list(user_id: int, the_time: str, page:int, page_size: int, type: int, 
             "data": []
         }
     temp = crud.get_bill_count(user_id, the_time, page_size, type, db)
+    if temp == 0:
+        return {
+            "code": 5001,
+            "message": "database error",
+            "data": []
+        }
+    elif temp == -1:
+        return {
+            "code": 401,
+            "message": "don't have such user",
+            "data": []
+        }
     total = temp["total"]
     page_num = temp["page_num"]
+    if total == 0:
+        return {
+            "code": 200,
+            "message": "success",
+            "total": total,
+            "page_num": page_num,
+            "data": []
+        }
 
     if page < 1 or page > page_num:
         return {
