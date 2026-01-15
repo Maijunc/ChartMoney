@@ -1,6 +1,6 @@
 from models import User, Bill_Category, Bill, Budget
 from sqlalchemy.orm import Session
-from sqlalchemy import select, update, desc, func
+from sqlalchemy import select, update, desc, func, delete
 from datetime import datetime
 from decimal import Decimal
 import schemas
@@ -476,4 +476,48 @@ def budget_add(budget: schemas.budget_add, db: Session):
         return 1
     except Exception:
         # 尝试添加时发生数据库错误
+        return 0
+
+
+# 用于删除预算
+def budget_delete(budget: schemas.budget_delete, db: Session):
+    stmt = select(User).where(User.id == budget.user_id)
+    try:
+        user = db.scalar(stmt)
+    except Exception:
+        return 0
+    # 用户不存在
+    if user is None:
+        return -1
+
+    stmt = select(Budget).where(Budget.id==budget.budget_id)
+    try:
+        target = db.scalar(stmt)
+    except Exception:
+        return 0
+    # 预算不存在
+    if target is None:
+        return -2
+
+    # 目标预算不属于此用户
+    if target.user_id != user.id:
+        return -3
+
+    # 如果是月度总预算，一并删除当月所有分类的预算
+    if target.is_total == True:
+        try:
+            stmt = delete(Budget).where(
+                (Budget.user_id == budget.user_id) &
+                (Budget.month == target.month) &
+                (Budget.is_total == False)
+            )
+            db.execute(stmt)
+        except Exception:
+            return 0
+
+    # 对目标记录进行删除
+    try:
+        db.delete(target)
+        return 1
+    except Exception:
         return 0

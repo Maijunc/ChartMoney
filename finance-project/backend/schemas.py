@@ -69,9 +69,16 @@ class bill_delete(BaseModel):
     bill_id: int = Field(..., ge=1)
 
 
+# 用于添加预算
 class budget_add(BaseModel):
     user_id: int = Field(..., ge=1)
     category_id: int
     is_total: bool
     amount: float = Field(..., gt=0)
     month: str = Field(..., min_length=7, max_length=7)
+
+
+# 用于删除预算
+class budget_delete(BaseModel):
+    user_id: int = Field(..., ge=1)
+    budget_id: int = Field(..., ge=1)

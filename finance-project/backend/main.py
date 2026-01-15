@@ -415,3 +415,35 @@ def budget_add(budget: schemas.budget_add, db: Session = Depends(database.get_db
             "message": "The total of all the monthly budgets has exceeded the monthly overall budget. This budget "
                        "cannot be created. It is necessary to first modify the monthly overall budget."
         }
+
+
+# 用于删除预算
+@app.delete("/budget/delete")
+def budget_delete(budget: schemas.budget_delete, db: Session = Depends(database.get_db)):
+    result = crud.budget_delete(budget, db)
+
+    if result == 1:
+        return {
+            "code": 200,
+            "message": "success"
+        }
+    elif result == 0:
+        return {
+            "code": 5001,
+            "message": "an error occurred while accessing the database"
+        }
+    elif result == -1:
+        return {
+            "code": 401,
+            "message": "user does not exist"
+        }
+    elif result == -2:
+        return {
+            "code": 400,
+            "message": "target budget does not exist"
+        }
+    elif result == -3:
+        return {
+            "code": 401,
+            "message": "the user doesn't have such budget"
+        }
