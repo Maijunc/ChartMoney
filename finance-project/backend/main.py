@@ -66,103 +66,103 @@ def user_resgister(user: schemas.User_register, db: Session = Depends(database.g
         }
 
 
-# 账单分类创建处理函数
-@app.post("/category/add")
-def bill_category_add(category: schemas.category_add, db: Session = Depends(database.get_db)):
-    result = crud.category_add(category, db)
-    if result == 1:
-        return {
-            "code": 200,
-            "message": "success"
-        }
-    elif result == 0:
-        return {
-            "code": 5001,
-            "message": "unable to be inserted into the database"
-        }
-    elif result == -1:
-        return {
-            "code": 401,
-            "message": "don't have such user"
-        }
-    elif result == -2:
-        return {
-            "code": 400,
-            "message": "a category with the same name already exists"
-        }
+# # 账单分类创建处理函数
+# @app.post("/category/add")
+# def bill_category_add(category: schemas.category_add, db: Session = Depends(database.get_db)):
+#     result = crud.category_add(category, db)
+#     if result == 1:
+#         return {
+#             "code": 200,
+#             "message": "success"
+#         }
+#     elif result == 0:
+#         return {
+#             "code": 5001,
+#             "message": "unable to be inserted into the database"
+#         }
+#     elif result == -1:
+#         return {
+#             "code": 401,
+#             "message": "don't have such user"
+#         }
+#     elif result == -2:
+#         return {
+#             "code": 400,
+#             "message": "a category with the same name already exists"
+#         }
 
 
-# 账单分类修改处理函数
-@app.put("/category/update")
-def bill_category_update(category: schemas.category_update, db: Session = Depends(database.get_db)):
-    result = crud.category_update(category, db)
-    if result == 1:
-        return {
-            "code": 200,
-            "message": "success"
-        }
-    elif result == 0:
-        return {
-            "code": 5001,
-            "message": "failed to update database records"
-        }
-    elif result == -1:
-        return {
-            "code": 401,
-            "message": "the user does not exist"
-        }
-    elif result == -2 or result == -4:
-        return {
-            "code": 400,
-            "message": "don't have such category"
-        }
-    elif result == -3:
-        return {
-            "code": 401,
-            "message": "the preset classification of the system cannot be modified"
-        }
-    elif result == -5:
-        return {
-            "code": 401,
-            "message": "the same classification already exists, so this modification is ineffective"
-        }
+# # 账单分类修改处理函数
+# @app.put("/category/update")
+# def bill_category_update(category: schemas.category_update, db: Session = Depends(database.get_db)):
+#     result = crud.category_update(category, db)
+#     if result == 1:
+#         return {
+#             "code": 200,
+#             "message": "success"
+#         }
+#     elif result == 0:
+#         return {
+#             "code": 5001,
+#             "message": "failed to update database records"
+#         }
+#     elif result == -1:
+#         return {
+#             "code": 401,
+#             "message": "the user does not exist"
+#         }
+#     elif result == -2 or result == -4:
+#         return {
+#             "code": 400,
+#             "message": "don't have such category"
+#         }
+#     elif result == -3:
+#         return {
+#             "code": 401,
+#             "message": "the preset classification of the system cannot be modified"
+#         }
+#     elif result == -5:
+#         return {
+#             "code": 401,
+#             "message": "the same classification already exists, so this modification is ineffective"
+#         }
 
 
-# 账单分类删除
-@app.delete("/category/delete")
-def bill_category_delete(category: schemas.category_delete, db: Session = Depends(database.get_db)):
-    result = crud.category_delete(category, db)
-
-    if result == 1:
-        return {
-            "code": 200,
-            "message": "success"
-        }
-    elif result == 0:
-        return {
-            "code": 5001,
-            "message": "cannot delete from the database"
-        }
-    elif result == -1:
-        return {
-            "code": 404,
-            "message": "category does not exist"
-        }
-    elif result == -2:
-        return {
-            "code": 401,
-            "message": "cannot delete system preset category"
-        }
-    elif result == -3:
-        return {
-            "code": 401,
-            "message": "cannot delete other user's category"
-        }
-    elif result == -4:
-        return {
-            "code": 400,
-            "message": "this category has bills associated with it and cannot be deleted"
-        }
+# # 账单分类删除
+# @app.delete("/category/delete")
+# def bill_category_delete(category: schemas.category_delete, db: Session = Depends(database.get_db)):
+#     result = crud.category_delete(category, db)
+#
+#     if result == 1:
+#         return {
+#             "code": 200,
+#             "message": "success"
+#         }
+#     elif result == 0:
+#         return {
+#             "code": 5001,
+#             "message": "cannot delete from the database"
+#         }
+#     elif result == -1:
+#         return {
+#             "code": 404,
+#             "message": "category does not exist"
+#         }
+#     elif result == -2:
+#         return {
+#             "code": 401,
+#             "message": "cannot delete system preset category"
+#         }
+#     elif result == -3:
+#         return {
+#             "code": 401,
+#             "message": "cannot delete other user's category"
+#         }
+#     elif result == -4:
+#         return {
+#             "code": 400,
+#             "message": "this category has bills associated with it and cannot be deleted"
+#         }
 
 
 # 获取账单分类列表
