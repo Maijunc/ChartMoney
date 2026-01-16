@@ -27,6 +27,7 @@ class User_register(BaseModel):
 class category_add(BaseModel):
     user_id: int = Field(..., ge=1)     # 必填且大于1
     name: str = Field(..., min_length=1, max_length=20)
+    type: int = Field(..., ge=1, le=2)
 
 
 # 用于修改账单分类名
@@ -34,6 +35,7 @@ class category_update(BaseModel):
     user_id: int = Field(..., ge=1)
     category_id: int = Field(..., ge=1)
     name: str = Field(..., min_length=1, max_length=20)
+    type: int = Field(..., ge=1, le=2)
 
 
 # 用于删除账单分类
@@ -47,7 +49,6 @@ class bill_add(BaseModel):
     user_id: int = Field(..., ge=1)
     category_id: int = Field(..., ge=1)
     amount: float = Field(..., gt=0)
-    type: int = Field(..., ge=1, le=2)
     bill_time: datetime
     remark: str = Field(max_length=255)
 
@@ -58,7 +59,6 @@ class bill_update(BaseModel):
     category_id: int = Field(..., ge=1)
     bill_id: int = Field(..., ge=1)
     amount: float = Field(..., gt=0)
-    type: int = Field(..., ge=1, le=2)
     bill_time: datetime
     remark: str = Field(max_length=255)
 
@@ -67,3 +67,25 @@ class bill_update(BaseModel):
 class bill_delete(BaseModel):
     user_id: int = Field(..., ge=1)
     bill_id: int = Field(..., ge=1)
+
+
+# 用于添加预算
+class budget_add(BaseModel):
+    user_id: int = Field(..., ge=1)
+    category_id: int
+    is_total: bool
+    amount: float = Field(..., gt=0)
+    month: str = Field(..., min_length=7, max_length=7)
+
+
+# 用于删除预算
+class budget_delete(BaseModel):
+    user_id: int = Field(..., ge=1)
+    budget_id: int = Field(..., ge=1)
+
+
+# 用于修改预算
+class budget_update(BaseModel):
+    user_id: int = Field(..., ge=1)
+    budget_id: int = Field(..., ge=1)
+    amount: float = Field(..., gt=0)
