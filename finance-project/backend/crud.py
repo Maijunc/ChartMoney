@@ -2,7 +2,6 @@ from models import User, Bill_Category, Bill, Budget
 from sqlalchemy.orm import Session
 from sqlalchemy import select, update, desc, func, delete
 from datetime import datetime
-from decimal import Decimal
 import schemas
 
 """
@@ -274,6 +273,43 @@ def bill_delete(bill: schemas.bill_delete, db: Session):
         db.delete(target)
         db.commit()
         return 1
+    except Exception:
+        return 0
+
+
+# 用于批量删除账单
+def bill_batch_delete(payload: schemas.bill_batch_delete, db: Session):
+    # 校验用户存在
+    stmt = select(User).where(User.id == payload.user_id)
+    user = db.scalar(stmt)
+    if user is None:
+        return -1
+
+    # 去重并保证有数据
+    bill_ids = list(dict.fromkeys(payload.bill_ids))
+    if len(bill_ids) == 0:
+        return -4  # bill_ids 为空
+
+    # 查询所有目标账单
+    stmt = select(Bill).where(Bill.id.in_(bill_ids))
+    bills = db.scalars(stmt).all()
+
+    # 有不存在的 id（严格模式：不做部分删除）
+    if len(bills) != len(bill_ids):
+        return -2
+
+    # 任意账单不属于该用户（严格模式：不做部分删除）
+    if any(b.user_id != payload.user_id for b in bills):
+        return -3
+
+    # 执行批量删除
+    try:
+        stmt = delete(Bill).where(Bill.id.in_(bill_ids))
+        result = db.execute(stmt)
+        db.commit()
+        # result.rowcount 在不同 DB 方言可能为 None，这里做兜底
+        deleted_count = result.rowcount if result.rowcount is not None else len(bill_ids)
+        return deleted_count
     except Exception:
         return 0
 

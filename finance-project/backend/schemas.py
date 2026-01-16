@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
+from typing import List
 
 
 """
@@ -89,3 +90,9 @@ class budget_update(BaseModel):
     user_id: int = Field(..., ge=1)
     budget_id: int = Field(..., ge=1)
     amount: float = Field(..., gt=0)
+
+
+# 用于批量删除账单
+class bill_batch_delete(BaseModel):
+    user_id: int = Field(..., ge=1)
+    bill_ids: List[int] = Field(..., min_length=1, description="需要删除的账单ID列表")

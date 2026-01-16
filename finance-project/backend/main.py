@@ -133,6 +133,34 @@ def bill_delete(bill: schemas.bill_delete, db: Session = Depends(database.get_db
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="该账单不属于此用户")
 
 
+# 批量删除账单
+@app.delete("/bill/batch-delete")
+def bill_batch_delete(payload: schemas.bill_batch_delete, db: Session = Depends(database.get_db)):
+    result = crud.bill_batch_delete(payload, db)
+
+    # 成功：返回删除数量（兼容旧风格 code/message）
+    if isinstance(result, int) and result > 0:
+        return {
+            "code": status.HTTP_200_OK,
+            "message": "成功",
+            "deleted_count": result
+        }
+
+    if result == 0:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
+    elif result == -1:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该用户不存在")
+    elif result == -2:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该账单不存在")
+    elif result == -3:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="该账单不属于此用户")
+    elif result == -4:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="bill_ids不能为空")
+
+    # 兜底
+    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="未知错误")
+
+
 # 获取账单列表
 @app.get("/bill/list")
 def bill_list(user_id: int, the_time: str, page:int, page_size: int, type: int, db: Session = Depends(database.get_db)):
