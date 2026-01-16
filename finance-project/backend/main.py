@@ -1,5 +1,7 @@
-from fastapi import FastAPI, Depends
+import fastapi
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import status
 from sqlalchemy.orm import Session
 import database, models, schemas, crud
 
@@ -30,14 +32,11 @@ def user_login(user: schemas.User, db: Session = Depends(database.get_db)):
     result = crud.user_login(user, db)
     if result:
         return {
-            "code": 200,
-            "message": "success"
+            "code": status.HTTP_200_OK,
+            "message": "登录成功"
         }
     else:
-        return {
-            "code": "401",
-            "message": "failure"
-        }
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或者密码错误")
 
 
 # 用户注册处理函数
@@ -47,145 +46,29 @@ def user_resgister(user: schemas.User_register, db: Session = Depends(database.g
     if result == 1:
         return {
             "code": 200,
-            "message": "success"
+            "message": "成功"
         }
     elif result == -1:
-        return {
-            "code": 400,
-            "message": "username already exists"
-        }
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="用户名已存在")
     elif result == -2:
-        return {
-            "code": 400,
-            "message": "the phone number already exists"
-        }
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="该手机号已注册")
     elif result == 0:
-        return {
-            "code": 400,
-            "message": "operational error"
-        }
-
-
-# # 账单分类创建处理函数
-# @app.post("/category/add")
-# def bill_category_add(category: schemas.category_add, db: Session = Depends(database.get_db)):
-#     result = crud.category_add(category, db)
-#     if result == 1:
-#         return {
-#             "code": 200,
-#             "message": "success"
-#         }
-#     elif result == 0:
-#         return {
-#             "code": 5001,
-#             "message": "unable to be inserted into the database"
-#         }
-#     elif result == -1:
-#         return {
-#             "code": 401,
-#             "message": "don't have such user"
-#         }
-#     elif result == -2:
-#         return {
-#             "code": 400,
-#             "message": "a category with the same name already exists"
-#         }
-
-
-# # 账单分类修改处理函数
-# @app.put("/category/update")
-# def bill_category_update(category: schemas.category_update, db: Session = Depends(database.get_db)):
-#     result = crud.category_update(category, db)
-#     if result == 1:
-#         return {
-#             "code": 200,
-#             "message": "success"
-#         }
-#     elif result == 0:
-#         return {
-#             "code": 5001,
-#             "message": "failed to update database records"
-#         }
-#     elif result == -1:
-#         return {
-#             "code": 401,
-#             "message": "the user does not exist"
-#         }
-#     elif result == -2 or result == -4:
-#         return {
-#             "code": 400,
-#             "message": "don't have such category"
-#         }
-#     elif result == -3:
-#         return {
-#             "code": 401,
-#             "message": "the preset classification of the system cannot be modified"
-#         }
-#     elif result == -5:
-#         return {
-#             "code": 401,
-#             "message": "the same classification already exists, so this modification is ineffective"
-#         }
-
-
-# # 账单分类删除
-# @app.delete("/category/delete")
-# def bill_category_delete(category: schemas.category_delete, db: Session = Depends(database.get_db)):
-#     result = crud.category_delete(category, db)
-#
-#     if result == 1:
-#         return {
-#             "code": 200,
-#             "message": "success"
-#         }
-#     elif result == 0:
-#         return {
-#             "code": 5001,
-#             "message": "cannot delete from the database"
-#         }
-#     elif result == -1:
-#         return {
-#             "code": 404,
-#             "message": "category does not exist"
-#         }
-#     elif result == -2:
-#         return {
-#             "code": 401,
-#             "message": "cannot delete system preset category"
-#         }
-#     elif result == -3:
-#         return {
-#             "code": 401,
-#             "message": "cannot delete other user's category"
-#         }
-#     elif result == -4:
-#         return {
-#             "code": 400,
-#             "message": "this category has bills associated with it and cannot be deleted"
-#         }
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="尝试注册时发生异常错误")
 
 
 # 获取账单分类列表
 @app.get("/category/list")
 def bill_category_list(type: int, db: Session = Depends(database.get_db)):
     if type not in [1, 2]:
-        return {
-            "code": "400",
-            "message": "incorrect input of types",
-            "data": []
-        }
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="type参数输入错误")
 
     result = crud.category_list(type, db)
     if result == 0:
-        return {
-            "code": "5001",
-            "message": "error occurred while querying the database",
-            "data": []
-        }
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
     else:
         return {
-            "code": "200",
-            "message": "success",
+            "code": status.HTTP_200_OK,
+            "message": "成功",
             "data": result
         }
 
@@ -197,24 +80,15 @@ def bill_add(bill: schemas.bill_add, db: Session = Depends(database.get_db)):
 
     if result == 1:
         return {
-            "code": 200,
-            "message": "success"
+            "code": status.HTTP_200_OK,
+            "message": "成功"
         }
     elif result == 0:
-        return {
-            "code": 5001,
-            "message": "an error occurred while accessing the database"
-        }
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
     elif result == -1:
-        return {
-            "code": 401,
-            "message": "user does not exist"
-        }
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该用户不存在")
     elif result == -2:
-        return {
-            "code": 401,
-            "message": "category does not exist"
-        }
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该分类不存在")
 
 
 # 修改订单
@@ -224,34 +98,19 @@ def bill_update(bill: schemas.bill_update, db: Session = Depends(database.get_db
 
     if result == 1:
         return {
-            "code": 200,
-            "message": "success"
+            "code": status.HTTP_200_OK,
+            "message": "成功"
         }
     elif result == 0:
-        return {
-            "code": 5001,
-            "message": "an error occurred while accessing the database"
-        }
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
     elif result == -1:
-        return {
-            "code": 401,
-            "message": "user does not exist"
-        }
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该用户不存在")
     elif result == -2:
-        return {
-            "code": 400,
-            "message": "category does not exist"
-        }
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该分类不存在")
     elif result == -3:
-        return {
-            "code": 400,
-            "message": "the bill does not exist"
-        }
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该账单不存在")
     elif result == -4:
-        return {
-            "code": 401,
-            "message": "this user does not have such a bill"
-        }
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="该账单不属于此用户")
 
 
 # 删除账单
@@ -261,46 +120,26 @@ def bill_delete(bill: schemas.bill_delete, db: Session = Depends(database.get_db
 
     if result == 1:
         return {
-            "code": 200,
-            "message": "success"
+            "code": status.HTTP_200_OK,
+            "message": "成功"
         }
     elif result == 0:
-        return {
-            "code": 5001,
-            "message": "an error occurred while accessing the database"
-        }
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
     elif result == -1:
-        return {
-            "code": 401,
-            "message": "user does not exist"
-        }
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该用户不存在")
     elif result == -2:
-        return {
-            "code": 400,
-            "message": "the bill does not exist"
-        }
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该账单不存在")
     elif result == -3:
-        return {
-            "code": 401,
-            "meaage": "the user does not have such a bill"
-        }
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="该账单不属于此用户")
 
 
 # 获取账单列表
 @app.get("/bill/list")
 def bill_list(user_id: int, the_time: str, page:int, page_size: int, type: int, db: Session = Depends(database.get_db)):
     if page_size <15:
-        return {
-            "code": 400,
-            "message": "abnormal page size",
-            "data": []
-        }
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="页面大小太小")
     if type not in [1, 2]:
-        return {
-            "code": 400,
-            "message": "abnormal page size",
-            "data": []
-        }
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="type参数输入错误")
     # 验证月份是否有效（1-12月）
     try:
         year_str, month_str = the_time.split('-')
@@ -310,53 +149,33 @@ def bill_list(user_id: int, the_time: str, page:int, page_size: int, type: int, 
         if month < 1 or month > 12:
             raise ValueError
     except ValueError:
-        return {
-            "code": 400,
-            "message": "incorrect time format",
-            "data": []
-        }
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不正确的日期格式")
     temp = crud.get_bill_count(user_id, the_time, page_size, type, db)
     if temp == 0:
-        return {
-            "code": 5001,
-            "message": "database error",
-            "data": []
-        }
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
     elif temp == -1:
-        return {
-            "code": 401,
-            "message": "don't have such user",
-            "data": []
-        }
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该用户不存在")
     total = temp["total"]
     page_num = temp["page_num"]
     if total == 0:
         return {
-            "code": 200,
-            "message": "success",
+            "code": status.HTTP_200_OK,
+            "message": "成功",
             "total": total,
             "page_num": page_num,
             "data": []
         }
 
     if page < 1 or page > page_num:
-        return {
-            "code": 400,
-            "message": "page does not exit",
-            "data": []
-        }
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="页号输入错误（为负数或是过大）")
 
     result = crud.bill_list(user_id, the_time, page, page_size, type, db)
     if result == 0:
-        return {
-            "code": 5001,
-            "message": "database error",
-            "data": []
-        }
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
     else:
         return {
-            "code": 200,
-            "message": "success",
+            "code": status.HTTP_200_OK,
+            "message": "成功",
             "total": total,
             "page_num": page_num,
             "data": result
@@ -370,56 +189,25 @@ def budget_add(budget: schemas.budget_add, db: Session = Depends(database.get_db
 
     if result == 1:
         return {
-            "code": 200,
-            "message": "success"
+            "code": status.HTTP_200_OK,
+            "message": "成功"
         }
     elif result == 0:
-        return {
-            "code": 5001,
-            "message": "an error occurred while accessing the database"
-        }
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
     elif result == -1:
-        return {
-            "code": 400,
-            "message": "the data input is incorrect"
-        }
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="参数输入错误")
     elif result == -2:
-        return {
-            "code": 400,
-            "message": "incorrect date format"
-        }
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不正确的日期格式")
     elif result == -3:
-        return {
-            "code": 401,
-            "message": "the user does not exist"
-        }
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该用户不存在")
     elif result == -4:
-        return {
-            "code": 400,
-            "message": "The monthly overall budget has not been set yet. It is necessary to set the monthly overall "
-                       "budget first"
-        }
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="总预算还未设置")
     elif result == -5:
-        return {
-            "code": 400,
-            "message": "don't have such category"
-        }
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该分类不存在")
     elif result == -6:
-        return {
-            "code": 400,
-            "message": "A revenue category cannot be set with a budget."
-        }
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="一个收入分类不能设置预算")
     elif result == -7:
-        return {
-            "code": 400,
-            "message": "the same type of budget for that month already exists"
-        }
-    elif result == -8:
-        return {
-            "code": 5001,
-            "message": "The total of all the monthly budgets has exceeded the monthly overall budget. This budget "
-                       "cannot be created. It is necessary to first modify the monthly overall budget."
-        }
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="当月有一个相同分类的预算已经存在")
 
 
 # 用于删除预算
@@ -429,29 +217,17 @@ def budget_delete(budget: schemas.budget_delete, db: Session = Depends(database.
 
     if result == 1:
         return {
-            "code": 200,
-            "message": "success"
+            "code": status.HTTP_200_OK,
+            "message": "成功"
         }
     elif result == 0:
-        return {
-            "code": 5001,
-            "message": "an error occurred while accessing the database"
-        }
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
     elif result == -1:
-        return {
-            "code": 401,
-            "message": "user does not exist"
-        }
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该用户不存在")
     elif result == -2:
-        return {
-            "code": 400,
-            "message": "target budget does not exist"
-        }
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该预算不存在")
     elif result == -3:
-        return {
-            "code": 401,
-            "message": "the user doesn't have such budget"
-        }
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="该预算不属于此用户")
 
 
 @app.put("/budget/update")
@@ -461,39 +237,16 @@ def budget_update(budget: schemas.budget_update, db: Session = Depends(database.
     if result == 1:
         return {
             "code": 200,
-            "message": "success"
+            "message": "成功"
         }
     elif result == 0:
-        return {
-            "code": 5001,
-            "message": "an error occurred while accessing the database"
-        }
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
     elif result == -1:
-        return {
-            "code": 401,
-            "message": "user does not exist"
-        }
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该用户不存在")
     elif result == -2:
-        return {
-            "code": 400,
-            "message": "don't have such budget"
-        }
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该账单不存在")
     elif result == -3:
-        return {
-            "code": 401,
-            "message": "The target budget does not belong to this user"
-        }
-    elif result == -4:
-        return {
-            "code": 5001,
-            "message": "There has been a serious error in the data stored in the database"
-        }
-    elif result == -5:
-        return {
-            "code": 5001,
-            "message": "The revised monthly total budget is less than the budgets of each category. This modification "
-                       "was rejected"
-        }
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="该预算不属于此用户")
 
 
 @app.get("/budget/list_month")
@@ -501,26 +254,14 @@ def budget_list_month(user_id: int, month: str, db: Session = Depends(database.g
     result = crud.budget_list_month(user_id, month, db)
 
     if result == 0:
-        return {
-            "code": 5001,
-            "message": "an error occurred while accessing the database",
-            "data": []
-        }
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
     elif result == -1:
-        return {
-            "code": 401,
-            "message": "User does not exist",
-            "data": []
-        }
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该用户不存在")
     elif result == -2:
-        return {
-            "code": 400,
-            "message": "incorrect date format",
-            "data": []
-        }
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不正确的日期格式")
     else:
         return {
-            "code": 200,
-            "message": "success",
+            "code": status.HTTP_200_OK,
+            "message": "成功",
             "data": result
         }

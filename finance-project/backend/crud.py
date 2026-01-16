@@ -427,22 +427,6 @@ def budget_add(budget: schemas.budget_add, db: Session):
                 return -7
         except Exception:
             return 0
-
-        try:
-            stmt = select(func.sum(Budget.amount)).where(
-                (Budget.user_id == budget.user_id) &
-                (Budget.month == budget.month) &
-                (Budget.is_total == False)
-            )
-            check = db.scalar(stmt)
-            if check is None:
-                check = Decimal('0')
-            total = Decimal(budget.amount) + check
-            # 发现当月各类预算之和已经超出月度总预算，不允许创建这个预算，需要先修改月度总预算
-            if total > total_budget.amount:
-                return -8
-        except Exception:
-            return 0
     else:
         try:
             stmt = select(Budget).where(
@@ -549,36 +533,6 @@ def budget_update(budget: schemas.budget_update, db: Session):
     # 该预算不属于此用户
     if target.user_id != budget.user_id:
         return -3
-
-    delta_amount = Decimal(str(budget.amount)) - target.amount
-    stmt1 = select(Budget).where(
-        (Budget.user_id == budget.user_id) &
-        (Budget.month == target.month) &
-        (Budget.is_total == True)
-    )
-    stmt2 = select(func.sum(Budget.amount)).where(
-        (Budget.user_id == budget.user_id) &
-        (Budget.month == target.month) &
-        (Budget.is_total == False)
-    )
-    try:
-        month_total = db.scalar(stmt1)
-        # 执行到这里但是发现月度总预算居然不存在，则数据库中必定出现了数据异常
-        if month_total is None:
-            return -4
-        month_total = month_total.amount
-        category_total = db.scalar(stmt2)
-        if category_total is None:
-            category_total = Decimal('0')
-    except Exception:
-        return 0
-    if target.is_total == True:
-        month_total += delta_amount
-    else:
-        category_total += delta_amount
-    # 如果修改后的分类总预算和月度总预算出错，不能修改
-    if month_total < category_total:
-        return -5
 
     # 校验完成之后，进行真正修改
     try:
