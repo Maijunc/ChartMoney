@@ -1,0 +1,504 @@
+/* 全局样式 HomeView页面用到 */
+.finance-dashboard {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #f5f7fa;
+  font-family:
+    'Inter',
+    system-ui,
+    -apple-system,
+    sans-serif;
+  color: #334155;
+}
+
+/* 顶部导航 */
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 2rem;
+  height: 70px;
+  background-color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: #165dff;
+  margin: 0;
+}
+
+.icon-wallet {
+  font-size: 1.8rem;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.username {
+  font-weight: 500;
+}
+
+.btn {
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.btn-primary {
+  background-color: #165dff;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #0e42d2;
+}
+
+.btn-notification {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background-color: #f44336;
+  color: white;
+  font-size: 0.7rem;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 主要内容区 */
+.dashboard-content {
+  flex: 1;
+  padding: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* 数据概览卡片 */
+.summary-cards {
+  display: flex;
+  flex-wrap: wrap; /* 自动换行 */
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+  width: 100%; /* 新增：占满父容器宽度，避免宽度不足导致换行异常 */
+  box-sizing: border-box; /* 新增：防止padding/border影响宽度计算 */
+}
+
+.summary-cards .card {
+  flex: 0 0 auto; /* 不拉伸、不收缩，宽度随内容/自定义 */
+  min-width: 280px; /* 最小宽度 */
+  width: calc(50% - 0.75rem); /* 可选：每行2列，减去gap的一半 */
+
+  box-sizing: border-box; /* 新增：确保padding不超出宽度 */
+  margin: 0;
+}
+
+.card {
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+}
+
+.summary-card {
+  padding: 1.5rem;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.card-header h3 {
+  font-size: 1rem;
+  font-weight: 500;
+  color: #64748b;
+  margin: 0;
+}
+
+.icon-income,
+.icon-expense,
+.icon-balance,
+.icon-budget {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.icon-income {
+  background-color: rgba(76, 175, 80, 0.15);
+  color: #4caf50;
+}
+
+.icon-expense {
+  background-color: rgba(244, 67, 54, 0.15);
+  color: #f44336;
+}
+
+.icon-balance {
+  background-color: rgba(22, 93, 255, 0.15);
+  color: #165dff;
+}
+
+.icon-budget {
+  background-color: rgba(255, 152, 0, 0.15);
+  color: #ff9800;
+}
+
+.card-body .amount {
+  font-size: 1.8rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem 0;
+}
+
+.rate {
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.positive {
+  color: #4caf50;
+}
+
+.negative {
+  color: #f44336;
+}
+
+.progress-container {
+  width: 100%;
+  height: 8px;
+  background-color: #e2e8f0;
+  border-radius: 4px;
+  margin-bottom: 0.8rem;
+}
+
+.progress-bar {
+  height: 100%;
+  border-radius: 4px;
+  background-color: #165dff;
+  transition: width 0.5s ease;
+}
+
+.budget-info {
+  font-size: 0.9rem;
+  margin: 0 0 0.5rem 0;
+}
+
+.budget-warning {
+  font-size: 0.8rem;
+  color: #f44336;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* 图表区域 */
+.charts-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+.charts-container .card {
+  flex: 1 1 100%; /* 占满整行 */
+  min-width: 500px;
+}
+
+.chart-card {
+  padding: 1.5rem;
+}
+
+.time-selector {
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background-color: #f8fafc;
+  cursor: pointer;
+}
+
+.chart {
+  width: 100%;
+  height: 300px;
+}
+
+.btn-outline {
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  border: 1px solid #165dff;
+  background-color: transparent;
+  color: #165dff;
+  cursor: pointer;
+}
+
+.btn-outline:hover {
+  background-color: rgba(22, 93, 255, 0.05);
+}
+
+/* 快捷功能区 */
+.quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+.quick-actions .action-card {
+  flex: 0 0 calc(50% - 0.75rem);
+  min-width: 180px; /* 小屏幕下最小宽度，避免卡片过窄 */
+  box-sizing: border-box;
+}
+
+.action-card {
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  padding: 2rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.action-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  background-color: #165dff;
+  color: white;
+}
+
+.action-card i {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  color: #165dff;
+  transition: color 0.2s ease;
+}
+
+.action-card:hover i {
+  color: white;
+}
+
+.action-card h4 {
+  font-size: 1rem;
+  font-weight: 500;
+  margin: 0;
+}
+
+/* 近期账单 */
+.recent-bills {
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.section-header h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.bills-table {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th {
+  text-align: left;
+  padding: 0.8rem 1rem;
+  font-weight: 500;
+  color: #64748b;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+td {
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.category-tag {
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.餐饮 {
+  background-color: rgba(255, 152, 0, 0.1);
+  color: #ff9800;
+}
+
+.工资 {
+  background-color: rgba(76, 175, 80, 0.1);
+  color: #4caf50;
+}
+
+.交通 {
+  background-color: rgba(22, 93, 255, 0.1);
+  color: #165dff;
+}
+
+.购物 {
+  background-color: rgba(156, 39, 176, 0.1);
+  color: #9c27b0;
+}
+
+.理财 {
+  background-color: rgba(0, 188, 212, 0.1);
+  color: #00bcd4;
+}
+
+.text-green {
+  color: #4caf50;
+  font-weight: 500;
+}
+
+.text-red {
+  color: #f44336;
+  font-weight: 500;
+}
+
+/* 页脚 */
+.dashboard-footer {
+  padding: 1.5rem 2rem;
+  text-align: center;
+  background-color: white;
+  color: #94a3b8;
+  font-size: 0.9rem;
+  border-top: 1px solid #f1f5f9;
+}
+
+/* 响应式适配 */
+@media (max-width: 768px) {
+  .dashboard-content {
+    padding: 1rem;
+  }
+
+  .charts-container {
+    grid-template-columns: 1fr;
+  }
+
+  .chart {
+    height: 250px;
+  }
+
+  .summary-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 系统介绍与导航模块样式 */
+.system-intro {
+  background-color: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  padding: 2rem;
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.home-page h1 {
+  font-size: 2rem;
+  color: #165dff;
+  margin: 0 0 1rem 0;
+  font-weight: 600;
+}
+
+.home-page p {
+  font-size: 1.1rem;
+  color: #64748b;
+  margin: 0 0 1.5rem 0;
+}
+
+.nav-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.nav-btn {
+  padding: 0.8rem 2rem;
+  background-color: #165dff;
+  color: white;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  border: none;
+  cursor: pointer;
+}
+
+.nav-btn:hover {
+  background-color: #0e42d2;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(22, 93, 255, 0.2);
+}
