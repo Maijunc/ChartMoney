@@ -46,18 +46,31 @@ class Bill_Category(Base):
     budgets: Mapped[List["Budget"]] = relationship(back_populates="bill_category")  # 一个账单分类对应多个预算
 
 
+class Payment_Method(Base):
+    __tablename__ = "payment_method"
+
+    id: Mapped[int] = mapped_column(type_=BigInteger ,primary_key=True, comment="支付方式id", autoincrement=True)
+    name: Mapped[str] = mapped_column(type_=String(20), comment="支付方式名称", nullable=False)
+
+    bills: Mapped[List["Bill"]] = relationship(back_populates="payment_method")  # 一个支付方式对应多个账单
+
+
 class Bill(Base):
     __tablename__ = "bill"
 
     id: Mapped[int] = mapped_column(type_=BigInteger ,primary_key=True, comment="账单id", autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"))
     category_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("bill_category.id"))
+    method_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("payment_method.id"))
+    name: Mapped[str] = mapped_column(type_=String(255), comment="账单名称", nullable=False)
     amount: Mapped[float] = mapped_column(DECIMAL(10, 2), nullable=False, comment="金额")
     remark: Mapped[str] = mapped_column(String(255), nullable=True, comment="账单备注")
     bill_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, comment="订单发生时间")
 
     user: Mapped["User"] = relationship(back_populates="bills", uselist=False)   # 一个账单对应一个用户
     bill_category: Mapped["Bill_Category"] = relationship(back_populates="bills", uselist=False)    # 一个账单对应一个分类
+    # 一个账单对应一个支付方式
+    payment_method: Mapped["Payment_Method"] = relationship(back_populates="bills", uselist=False)
 
 
 class Budget(Base):
