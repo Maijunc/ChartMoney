@@ -13,6 +13,8 @@ import SettingsView from '../views/SettingsView.vue' //设置页面
 import Login from '../views/Login.vue' //登录页面
 import Register from '../views/Register.vue' //注册页面
 
+import ApiTestView from '../views/ApiTestView.vue'
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -83,6 +85,12 @@ const router = createRouter({
       name: 'login',
       component: Login,
       meta: { title: '登录页面' },
+    },
+    {
+    path: '/api-test',
+    name: 'apiTest',
+    component: ApiTestView,
+    meta: { title: 'API服务层测试页面' }
     },
   ],
 })

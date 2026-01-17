@@ -817,13 +817,13 @@ const onReset = resetSearch
 }
 
 /* 穿透样式：确保Element Plus分页组件内部也居中（如果需要） */
-::v-deep .expense-pagination .el-pagination {
+:deep(.expense-pagination .el-pagination) {
   justify-content: center;
 }
 
 /* 表格内编辑控件样式优化 */
-::v-deep .el-table .el-input,
-::v-deep .el-table .el-select {
+:deep(.el-table .el-input),
+:deep(.el-table .el-select) {
   width: 100%;
 }
 </style>

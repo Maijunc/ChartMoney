@@ -822,9 +822,9 @@ const handleExportIncome = () => {
 }
 
 /* 表格内编辑控件样式优化 */
-::v-deep .el-table .el-input,
-::v-deep .el-table .el-select,
-::v-deep .el-table .el-date-picker {
+:deep(.el-table .el-input),
+:deep(.el-table .el-select),
+:deep(.el-table .el-date-picker) {
   width: 100%;
 }
 </style>

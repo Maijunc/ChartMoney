@@ -176,17 +176,17 @@ body {
 }
 
 /* 消费年度总结菜单固定颜色 */
-::v-deep .sidebar-menu .el-menu-item[data-index='data'] {
+.sidebar-menu .el-menu-item[data-index='data'] {
   color: rgb(64, 158, 255) !important;
 }
-::v-deep .sidebar-menu .el-menu-item[data-index='data']:hover {
-  color: rgb(64, 158, 255) !important;
-  background: transparent !important;
-}
-::v-deep .sidebar-menu .el-menu-item[data-index='data'].is-active {
+.sidebar-menu .el-menu-item[data-index='data']:hover {
   color: rgb(64, 158, 255) !important;
   background: transparent !important;
 }
-::v-deep .sidebar-menu .el-menu-item[data-index='data'] .el-icon {
+.sidebar-menu .el-menu-item[data-index='data'].is-active {
+  color: rgb(64, 158, 255) !important;
+  background: transparent !important;
+}
+.sidebar-menu .el-menu-item[data-index='data'] .el-icon {
   color: rgb(64, 158, 255) !important;
 }
