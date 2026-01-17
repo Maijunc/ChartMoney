@@ -736,7 +736,8 @@ def budget_list_month(user_id: int, month: str, db: Session):
 """
 以下为可视化部分的查询函数
 """
-def get_trend_7(user_id: int, db: Session):
+# 获取近n天的消费趋势数据
+def get_trend_days(user_id: int, days: int, db: Session):
     stmt = select(User).filter(User.id==user_id)
     try:
         user = db.scalar(stmt)
@@ -746,7 +747,7 @@ def get_trend_7(user_id: int, db: Session):
         return -1
 
     end_date = datetime.now()
-    start_date = end_date - timedelta(days=6)   # 回溯到6天前
+    start_date = end_date - timedelta(days=days-1)   # 回溯到n-1天前
 
     # 1. 生成完整的日期列表
     date_range = []

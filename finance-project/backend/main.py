@@ -364,11 +364,12 @@ def budget_list_month(user_id: int, month: str, db: Session = Depends(database.g
 以下是可视化接口部分
 """
 # 消费趋势分析之获取近七天数据
-@app.get("/trend/seven_days")
-def get_trend_7(user_id: int = Query(..., ge=1),
+@app.get("/trend/days")
+def get_trend_days(user_id: int = Query(..., ge=1),
+                days: int = Query(..., ge=7),
                 db: Session = Depends(database.get_db)
                 ):
-    result = crud.get_trend_7(user_id, db)
+    result = crud.get_trend_days(user_id, days, db)
 
     if result == 0:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
@@ -379,6 +380,7 @@ def get_trend_7(user_id: int = Query(..., ge=1),
         return {
             "code": status.HTTP_200_OK,
             "message": "success",
+            "days": days,
             "data": {
                 "income_list": income_list,
                 "expense_list": expense_list
