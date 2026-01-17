@@ -49,6 +49,8 @@ class category_delete(BaseModel):
 class bill_add(BaseModel):
     user_id: int = Field(..., ge=1)
     category_id: int = Field(..., ge=1)
+    method_id: int = Field(..., ge=1)
+    name: str = Field(max_length=255)
     amount: float = Field(..., gt=0)
     bill_time: datetime
     remark: str = Field(max_length=255)
@@ -58,7 +60,9 @@ class bill_add(BaseModel):
 class bill_update(BaseModel):
     user_id: int = Field(..., ge=1)
     category_id: int = Field(..., ge=1)
+    method_id: int = Field(..., ge=1)
     bill_id: int = Field(..., ge=1)
+    name: str = Field(max_length=255)
     amount: float = Field(..., gt=0)
     bill_time: datetime
     remark: str = Field(max_length=255)

@@ -1,4 +1,4 @@
-from models import User, Bill_Category, Bill, Budget
+from models import User, Bill_Category, Bill, Budget, Payment_Method
 from sqlalchemy.orm import Session
 from sqlalchemy import select, update, desc, func, delete
 from datetime import datetime
@@ -240,10 +240,18 @@ def bill_add(bill: schemas.bill_add, db: Session):
     if category is None:
         return -2
 
+    stmt = select(Payment_Method).where(Payment_Method.id == bill.method_id)
+    method = db.scalar(stmt)
+    # 支付方式不存在
+    if method is None:
+        return -3
+
     try:
         new_bill = Bill(
             user_id=bill.user_id,
             category_id=bill.category_id,
+            method_id=bill.method_id,
+            name=bill.name,
             amount=bill.amount,
             remark=bill.remark,
             bill_time=bill.bill_time
@@ -263,6 +271,9 @@ def bill_update(bill: schemas.bill_update, db: Session):
     stmt = select(Bill_Category).where(Bill_Category.id == bill.category_id)
     category = db.scalar(stmt)
 
+    stmt = select(Payment_Method).where(Payment_Method.id == bill.method_id)
+    method = db.scalar(stmt)
+
     stmt = select(Bill).where(Bill.id == bill.bill_id)
     target = db.scalar(stmt)
 
@@ -278,11 +289,16 @@ def bill_update(bill: schemas.bill_update, db: Session):
     # 此账单不属于这个用户
     if target.user_id != bill.user_id:
         return -4
+    # 没有这个支付手段
+    if method is None:
+        return -5
 
     try:
         # 尝试修改数据库
         stmt = update(Bill).where(Bill.id == bill.bill_id).values(
             category_id=bill.category_id,
+            method_id=bill.method_id,
+            name=bill.name,
             amount=bill.amount,
             remark=bill.remark,
             bill_time=bill.bill_time
@@ -374,14 +390,22 @@ def bill_list(user_id: int, the_time: str, page: int, page_size: int, type: int,
         stmt = select(
             Bill.category_id,
             Bill.id,
-            Bill_Category.name.label("name"),
+            Bill.method_id,
+            Bill_Category.name.label("category_name"),
+            Payment_Method.name.label("method_name"),
             Bill_Category.type.label("type"),
+            Bill.name,
             Bill.amount,
             Bill.remark,
             Bill.bill_time,
             Bill.create_time,
             Bill.update_time
-        ).join(Bill_Category, Bill.category_id == Bill_Category.id).where(
+        ).join(
+            Bill_Category,
+            Bill.category_id == Bill_Category.id).join(
+            Payment_Method,
+            Payment_Method.id == Bill.method_id
+        ).where(
             (Bill.user_id == user_id) &
             (Bill.bill_time >= start_time) &
             (Bill.bill_time < end_time) &
@@ -397,6 +421,9 @@ def bill_list(user_id: int, the_time: str, page: int, page_size: int, type: int,
         result.append({
             "category_id": bill.category_id,
             "bill_id": bill.id,
+            "method_id": bill.method_id,
+            "category_name": bill.category_name,
+            "method_name": bill.method_name,
             "name": bill.name,
             "amount": bill.amount,
             "remark": bill.remark,

@@ -135,6 +135,8 @@ def bill_add(bill: schemas.bill_add, db: Session = Depends(database.get_db)):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该用户不存在")
     elif result == -2:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该分类不存在")
+    elif result == -3:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该支付方式不存在")
 
 
 # 修改订单
@@ -157,6 +159,8 @@ def bill_update(bill: schemas.bill_update, db: Session = Depends(database.get_db
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该账单不存在")
     elif result == -4:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="该账单不属于此用户")
+    elif result == -5:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该支付方式不存在")
 
 
 # 删除账单
