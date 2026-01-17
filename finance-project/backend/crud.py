@@ -1,7 +1,8 @@
 from models import User, Bill_Category, Bill, Budget, Payment_Method
 from sqlalchemy.orm import Session
 from sqlalchemy import select, update, desc, func, delete
-from datetime import datetime
+from datetime import datetime, timedelta
+from collections import defaultdict
 import schemas
 import security  # 导入安全工具模块
 
@@ -730,3 +731,81 @@ def budget_list_month(user_id: int, month: str, db: Session):
             })
 
     return result
+
+
+"""
+以下为可视化部分的查询函数
+"""
+def get_trend_7(user_id: int, db: Session):
+    stmt = select(User).filter(User.id==user_id)
+    try:
+        user = db.scalar(stmt)
+    except Exception:
+        return 0
+    if user is None:
+        return -1
+
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=6)   # 回溯到6天前
+
+    # 1. 生成完整的日期列表
+    date_range = []
+    current = start_date.date()
+    end = end_date.date()
+    while current <= end:
+        date_range.append(current)
+        current += timedelta(days=1)
+
+    # 2. 优化：一次查询获取所有数据
+    stmt = select(
+        func.date(Bill.bill_time).label("date"),
+        Bill_Category.type.label("category_type"),  # 1=收入, 2=支出
+        func.sum(Bill.amount).label("amount")
+    ).outerjoin(
+        Bill_Category, Bill.category_id == Bill_Category.id
+    ).filter(
+        Bill.user_id == user_id,
+        Bill_Category.type.in_([1, 2]),  # 同时查询收入和支出
+        Bill.bill_time >= start_date,
+        Bill.bill_time <= end_date
+    ).group_by(
+        func.date(Bill.bill_time),
+        Bill_Category.type
+    )
+
+    try:
+        results = db.execute(stmt).all()
+    except Exception:
+        return 0
+
+    # 3. 使用字典存储结果
+    income_dict = defaultdict(float)
+    expense_dict = defaultdict(float)
+
+    for row in results:
+        date_key = row.date
+        if row.category_type == 1:  # 收入
+            income_dict[date_key] = float(row.amount or 0)
+        elif row.category_type == 2:  # 支出
+            expense_dict[date_key] = float(row.amount or 0)
+
+    # 4. 填充完整的日期列表
+    income_list = []
+    expense_list = []
+
+    for date in date_range:
+        # 收入列表
+        income_amount = income_dict.get(date, 0.0)
+        income_list.append({
+            "date": date,
+            "amount": income_amount
+        })
+
+        # 支出列表
+        expense_amount = expense_dict.get(date, 0.0)
+        expense_list.append({
+            "date": date,
+            "amount": expense_amount
+        })
+
+    return income_list, expense_list

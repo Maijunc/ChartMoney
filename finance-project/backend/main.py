@@ -1,5 +1,5 @@
 import fastapi
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import status
 from sqlalchemy.orm import Session
@@ -357,4 +357,30 @@ def budget_list_month(user_id: int, month: str, db: Session = Depends(database.g
             "code": status.HTTP_200_OK,
             "message": "成功",
             "data": result
+        }
+
+
+"""
+以下是可视化接口部分
+"""
+# 消费趋势分析之获取近七天数据
+@app.get("/trend/seven_days")
+def get_trend_7(user_id: int = Query(..., ge=1),
+                db: Session = Depends(database.get_db)
+                ):
+    result = crud.get_trend_7(user_id, db)
+
+    if result == 0:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
+    elif result == -1:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该用户不存在")
+    else:
+        income_list, expense_list = result
+        return {
+            "code": status.HTTP_200_OK,
+            "message": "success",
+            "data": {
+                "income_list": income_list,
+                "expense_list": expense_list
+            }
         }
