@@ -226,6 +226,23 @@ def category_list(type: int, db: Session):
     return result_list
 
 
+# 用于获取支付方式列表
+def payment_method_list(db: Session):
+    try:
+        stmt = select(Payment_Method)
+        methods = db.scalars(stmt).all()
+    except Exception:
+        return 0
+
+    result_list = []
+    for method in methods:
+        result_list.append({
+            "method_id": method.id,
+            "name": method.name,
+        })
+    return result_list
+
+
 # 用于创建账单
 def bill_add(bill: schemas.bill_add, db: Session):
     stmt = select(User).where(User.id == bill.user_id)

@@ -119,6 +119,21 @@ def bill_category_list(type: int, db: Session = Depends(database.get_db)):
         }
 
 
+# 获取支付方式列表
+@app.get("/payment_method/list")
+def payment_method_list(db: Session = Depends(database.get_db)):
+    result = crud.payment_method_list(db)
+
+    if result == 0:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
+    else:
+        return {
+            "code": status.HTTP_200_OK,
+            "message": "成功",
+            "data": result
+        }
+
+
 # 创建订单
 @app.post("/bill/add")
 def bill_add(bill: schemas.bill_add, db: Session = Depends(database.get_db)):
