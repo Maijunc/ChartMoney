@@ -3,26 +3,66 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, update, desc, func, delete
 from datetime import datetime
 import schemas
+import security  # 导入安全工具模块
 
 """
 本模块主要负责进行对数据库的增删改查
 """
 
 
-# 用于用户登录时，查看用户名和密码是否正确，正确就会返回True
+# 用于用户登录时，查看用户名和密码是否正确
+# 返回值说明：
+#   - 成功：返回用户对象 (User)
+#   - 失败：返回 None (用户不存在或密码错误)
 def user_login(user: schemas.User, db: Session):
     result = db.execute(select(User).where((User.username == user.username)))
     select_user = result.scalar_one_or_none()
-    if select_user is not None:
+
+    # 用户不存在
+    if select_user is None:
+        return None
+
+    # 验证密码
+    # 1. 尝试使用 bcrypt 验证（新用户的加密密码）
+    try:
+        if security.verify_password(user.password, select_user.password):
+            return select_user  # 密码正确，返回用户对象
+    except Exception:
+        # 2. 如果 bcrypt 验证失败（可能是旧的明文密码），尝试明文对比
         if select_user.password == user.password:
-            return True
-        else:
-            return False
-    else:
-        return False
+            # 明文密码匹配，自动升级为加密密码
+            try:
+                # 确保明文密码不超过 72 字节（bcrypt 限制）
+                plain_password = user.password
+                if len(plain_password.encode('utf-8')) > 72:
+                    plain_password = plain_password[:72]
+                    print(f"[警告] 用户 {user.username} 的密码超过72字节，已截断")
+
+                hashed_password = security.hash_password(plain_password)
+                select_user.password = hashed_password
+                db.commit()
+                db.refresh(select_user)  # 刷新对象
+                print(f"[安全升级] 用户 {user.username} 的密码已自动升级为加密存储")
+            except Exception as e:
+                print(f"[警告] 密码升级失败: {e}")
+                print(f"  - 用户名: {user.username}")
+                print(f"  - 明文密码长度: {len(user.password)} 字符")
+                print(f"  - 明文密码字节数: {len(user.password.encode('utf-8'))} 字节")
+                db.rollback()
+
+            return select_user  # 返回用户对象
+
+    # 密码错误
+    return None
 
 
 # 用于用户的注册
+# 返回值说明：
+#   - 成功：返回新创建的用户对象 (User)
+#   - 失败：返回错误代码
+#     -1: 用户名已存在
+#     -2: 手机号已注册
+#     0: 数据库异常
 def user_register(user: schemas.User_register, db: Session):
     check = db.execute(select(User).where((User.username == user.username)))
     check = check.scalar_one_or_none()
@@ -32,17 +72,21 @@ def user_register(user: schemas.User_register, db: Session):
     check = db.execute(select(User).where((User.phone == user.phone)))
     check = check.scalar_one_or_none()
     if check is not None:
-        return -2  # 改手机号已被注册
+        return -2  # 该手机号已被注册
 
     # 创建要添加到数据库中的用户
-    user = User(username=user.username, phone=user.phone, password=user.password)
+    # 使用 bcrypt 加密密码
+    hashed_password = security.hash_password(user.password)
+    new_user = User(username=user.username, phone=user.phone, password=hashed_password)
 
     # 添加到数据库中并提交事务
     try:
-        db.add(user)  # 因为user是User模型类，所以add直接会将其添加到user表中
+        db.add(new_user)  # 因为new_user是User模型类，所以add直接会将其添加到user表中
         db.commit()
-        return 1
+        db.refresh(new_user)  # 刷新对象，获取数据库生成的 id
+        return new_user  # 返回新创建的用户对象
     except Exception:
+        db.rollback()  # 回滚事务
         return 0
 
 

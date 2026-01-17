@@ -27,7 +27,7 @@ class User(Base):   # 用户表的模型类
     # id从1开始自递增
     id: Mapped[int] = mapped_column(type_=BigInteger ,primary_key=True, comment="用户id", autoincrement=True)
     username: Mapped[str] = mapped_column(type_=String(20), comment="用户名", nullable=False, unique=True)
-    password: Mapped[str] = mapped_column(type_=String(64), comment="用户密码", nullable=False)
+    password: Mapped[str] = mapped_column(type_=String(255), comment="用户密码（bcrypt加密后60字符）", nullable=False)
     phone: Mapped[str] = mapped_column(type_=String(11), comment="电话号码", nullable=False, unique=True)
     avatar: Mapped[str] = mapped_column(type_=String(255), comment="头像地址", nullable=True)
 

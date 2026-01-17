@@ -60,17 +60,21 @@ export const useUserStore = defineStore('user', () => {
         password: loginData.password
       })
 
-      if (res.code === 200) {
-        // 注意：后端登录接口只返回 code 和 message，没有返回用户信息
-        // 这里我们暂时只保存用户名，userId 需要后端返回或从其他接口获取
-        // TODO: 后端需要在登录接口返回 user_id 等用户信息
-
-        username.value = loginData.username
-        // 临时方案：使用用户名的hash作为userId（实际应该由后端返回）
-        // 或者后续调用获取用户信息的接口
-        userId.value = 1 // 默认设置为1，实际应该从后端获取
+      if (res.code === 200 && res.data) {
+        // ✅ 保存后端返回的用户信息和 Token
+        userId.value = res.data.user_id
+        username.value = res.data.username
+        phone.value = res.data.phone || ''
+        avatar.value = res.data.avatar || ''
+        token.value = res.data.token  // ✅ 保存 JWT Token
 
         saveUserInfo()
+
+        console.log('✅ 登录成功，Token 已保存:', {
+          userId: userId.value,
+          username: username.value,
+          tokenPreview: token.value.substring(0, 20) + '...'
+        })
 
         ElMessage.success('登录成功！')
         return true
@@ -97,8 +101,18 @@ export const useUserStore = defineStore('user', () => {
         password: registerData.password
       })
 
-      if (res.code === 200) {
-        ElMessage.success('注册成功！请登录')
+      if (res.code === 200 && res.data) {
+        // ✅ 注册成功后，保存用户信息（可选：直接登录）
+        userId.value = res.data.user_id
+        username.value = res.data.username
+        phone.value = res.data.phone || ''
+        avatar.value = res.data.avatar || ''
+        // 注意：注册接口目前不返回 Token，需要再次登录
+        // 如果需要注册后自动登录，可以调用登录接口
+
+        saveUserInfo()
+
+        ElMessage.success('注册成功！')
         return true
       }
       return false

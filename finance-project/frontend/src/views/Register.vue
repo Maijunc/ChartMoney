@@ -22,34 +22,20 @@
         <el-form-item prop="username">
           <el-input
             v-model="registerForm.username"
-            placeholder="请输入用户名"
+            placeholder="请输入用户名（2-20个字符）"
             prefix-icon="User"
             size="large"
           />
         </el-form-item>
 
-        <el-form-item prop="account">
+        <el-form-item prop="phone">
           <el-input
-            v-model="registerForm.account"
-            placeholder="请输入手机号/邮箱"
+            v-model="registerForm.phone"
+            placeholder="请输入手机号（11位）"
             prefix-icon="Phone"
             size="large"
+            maxlength="11"
           />
-        </el-form-item>
-
-        <el-form-item prop="captcha">
-          <div class="captcha-container">
-            <el-input
-              v-model="registerForm.captcha"
-              placeholder="请输入验证码"
-              prefix-icon="Message"
-              size="large"
-              style="width: 70%"
-            />
-            <el-button type="primary" @click="sendCaptcha" :disabled="captchaDisabled" size="large">
-              {{ captchaText }}
-            </el-button>
-          </div>
         </el-form-item>
 
         <el-form-item prop="password">
@@ -103,18 +89,19 @@
 </template>
 
 <script setup>
-import { ref, reactive, onUnmounted } from 'vue'
+import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
+const userStore = useUserStore()
 
 // 注册表单
 const registerFormRef = ref(null)
 const registerForm = reactive({
   username: '',
-  account: '',
-  captcha: '',
+  phone: '',  // 改为 phone，匹配后端字段（仅支持手机号）
   password: '',
   confirmPassword: '',
   agreement: false,
@@ -126,26 +113,13 @@ const registerRules = reactive({
     { required: true, message: '请输入用户名', trigger: 'blur' },
     { min: 2, max: 20, message: '用户名长度在2到20个字符之间', trigger: 'blur' },
   ],
-  account: [
-    { required: true, message: '请输入手机号/邮箱', trigger: 'blur' },
+  phone: [
+    { required: true, message: '请输入手机号', trigger: 'blur' },
     {
-      validator: (rule, value, callback) => {
-        // 简单的手机号/邮箱验证
-        const phoneReg = /^1[3-9]\d{9}$/
-        const emailReg = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
-
-        if (value && !phoneReg.test(value) && !emailReg.test(value)) {
-          callback(new Error('请输入有效的手机号或邮箱'))
-        } else {
-          callback()
-        }
-      },
+      pattern: /^1[3-9]\d{9}$/,
+      message: '请输入有效的11位手机号',
       trigger: 'blur',
     },
-  ],
-  captcha: [
-    { required: true, message: '请输入验证码', trigger: 'blur' },
-    { len: 6, message: '验证码长度为6位', trigger: 'blur' },
   ],
   password: [
     { required: true, message: '请设置密码', trigger: 'blur' },
@@ -181,39 +155,6 @@ const registerRules = reactive({
 // 注册状态
 const registerLoading = ref(false)
 
-// 验证码倒计时
-const captchaDisabled = ref(false)
-const captchaText = ref('获取验证码')
-let captchaTimer = null
-
-// 发送验证码
-const sendCaptcha = () => {
-  // 验证账号格式
-  registerFormRef.value.validateField('account', (error) => {
-    if (error) {
-      return
-    }
-
-    // 模拟发送验证码
-    captchaDisabled.value = true
-    let count = 60
-    captchaText.value = `${count}秒后重新获取`
-
-    captchaTimer = setInterval(() => {
-      count--
-      captchaText.value = `${count}秒后重新获取`
-
-      if (count <= 0) {
-        clearInterval(captchaTimer)
-        captchaDisabled.value = false
-        captchaText.value = '获取验证码'
-      }
-    }, 1000)
-
-    ElMessage.success('验证码已发送，请注意查收')
-  })
-}
-
 // 处理注册
 const handleRegister = async () => {
   try {
@@ -222,16 +163,19 @@ const handleRegister = async () => {
 
     registerLoading.value = true
 
-    // 模拟注册请求
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    // 调用真实的注册 API
+    const success = await userStore.register({
+      username: registerForm.username,
+      phone: registerForm.phone,
+      password: registerForm.password
+    })
 
-    // 注册成功
-    ElMessage.success('注册成功，请登录')
-
-    // 跳转到登录页面
-    router.push('/login')
+    if (success) {
+      // 注册成功，跳转到登录页面
+      router.push('/login')
+    }
   } catch (error) {
-    console.error('注册验证失败:', error)
+    console.error('注册失败:', error)
   } finally {
     registerLoading.value = false
   }
@@ -241,13 +185,6 @@ const handleRegister = async () => {
 const handleGoToLogin = () => {
   router.push('/login')
 }
-
-// 组件卸载时清除定时器
-onUnmounted(() => {
-  if (captchaTimer) {
-    clearInterval(captchaTimer)
-  }
-})
 </script>
 
 <style scoped>

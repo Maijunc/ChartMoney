@@ -3,7 +3,8 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import status
 from sqlalchemy.orm import Session
-import database, models, schemas, crud
+import database, models, schemas, crud, security
+from dependencies import get_current_user, get_current_user_id
 
 # 启动时自动在数据库建表 (C++思维：类似编译时链接)
 models.Base.metadata.create_all(bind=database.engine)  # 创建所有以Base类为基类的模型类的元数据
@@ -25,35 +26,80 @@ def read_root():
     return {"message": "Hello from FastAPI Backend!"}
 
 
+# 测试 Token 认证的受保护接口
+@app.get("/user/me")
+def get_current_user_info(current_user: models.User = Depends(get_current_user)):
+    """
+    获取当前登录用户的信息（需要 Token）
+
+    请求头需要包含：
+    Authorization: Bearer <token>
+    """
+    return {
+        "code": status.HTTP_200_OK,
+        "message": "获取成功",
+        "data": {
+            "user_id": current_user.id,
+            "username": current_user.username,
+            "phone": current_user.phone,
+            "avatar": current_user.avatar if current_user.avatar else ""
+        }
+    }
+
+
 # 用户登录处理函数
 @app.post("/user/login")
 def user_login(user: schemas.User, db: Session = Depends(database.get_db)):
     # ↑Depends依赖注入的一定是可调用函数对象，且Depends必须在处理函数中使用才会有效
     result = crud.user_login(user, db)
+
+    # result 现在是用户对象或 None
     if result:
+        # 生成 JWT Token
+        access_token = security.create_access_token(
+            data={"user_id": result.id, "username": result.username}
+        )
+
         return {
             "code": status.HTTP_200_OK,
-            "message": "登录成功"
+            "message": "登录成功",
+            "data": {
+                "user_id": result.id,
+                "username": result.username,
+                "phone": result.phone,
+                "avatar": result.avatar if result.avatar else "",  # 头像可能为空
+                "token": access_token  # 返回 JWT Token
+            }
         }
     else:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或者密码错误")
+        # 统一返回"用户名或密码错误"，不区分是用户不存在还是密码错误（安全考虑）
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误")
 
 
 # 用户注册处理函数
 @app.post("/user/register")
-def user_resgister(user: schemas.User_register, db: Session = Depends(database.get_db)):
+def user_register(user: schemas.User_register, db: Session = Depends(database.get_db)):
     result = crud.user_register(user, db)
-    if result == 1:
+
+    # result 现在是用户对象或错误代码
+    # 判断是否为用户对象（成功的情况）
+    if isinstance(result, models.User):
         return {
-            "code": 200,
-            "message": "成功"
+            "code": status.HTTP_200_OK,
+            "message": "注册成功",
+            "data": {
+                "user_id": result.id,
+                "username": result.username,
+                "phone": result.phone,
+                "avatar": result.avatar if result.avatar else ""
+            }
         }
     elif result == -1:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="用户名已存在")
     elif result == -2:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="该手机号已注册")
     elif result == 0:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="尝试注册时发生异常错误")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="注册时发生异常错误")
 
 
 # 获取账单分类列表
