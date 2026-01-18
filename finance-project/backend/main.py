@@ -435,3 +435,25 @@ def get_recent_bill(user_id: int = Query(..., ge=1),
             "days": days,
             "data": result
         }
+
+
+# 消费列别占比（单个月，month=-1时为全部，month=0时为当月，month=1时为上个月，以此类推，最多往前推12个月）
+@app.get("/analysis/expense_propotion_month")
+def get_propotion_month(user_id: int = Query(..., ge=1),
+                        month: int = Query(..., ge=-1, le=12),
+                        db: Session = Depends(database.get_db)
+                        ):
+    result = crud.get_propotion_month(user_id, month, db)
+
+    if result == 0:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
+    elif result == -1:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该用户不存在")
+    else:
+        time, data = result
+        return {
+            "code": status.HTTP_200_OK,
+            "message": "成功",
+            "time": time,
+            "data": data
+        }

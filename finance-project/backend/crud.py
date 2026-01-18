@@ -993,3 +993,134 @@ def get_recent_bills(user_id: int, days: int, db: Session):
         })
 
     return result_list
+
+
+# 消费列别占比（单个月，month=-1时为全部，month=0时为当月，month=1时为上个月，以此类推，最多往后推12个月）
+def get_propotion_month(user_id: int, month: int, db: Session):
+    # 1. 验证用户存在
+    try:
+        user = db.scalar(select(User).filter(User.id == user_id))
+    except Exception:
+        return 0
+    if user is None:
+        return -1
+
+    # 2. 根据month参数计算时间范围
+    now = datetime.now()
+
+    if month == -1:  # 全部历史数据
+        start_date = None  # 不限制开始时间
+        end_date = None  # 不限制结束时间
+        period_description = "全部历史"
+    elif month == 0:  # 当月
+        start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        # 计算下个月1号，然后减1秒得到本月最后时刻
+        if now.month == 12:
+            next_month = now.replace(year=now.year + 1, month=1, day=1)
+        else:
+            next_month = now.replace(month=now.month + 1, day=1)
+        end_date = next_month - timedelta(seconds=1)
+        period_description = f"{now.year}年{now.month}月"
+    else:  # 指定前N个月
+        # 计算目标月份
+        target_year = now.year
+        target_month = now.month - month
+
+        # 处理跨年
+        while target_month < 1:
+            target_month += 12
+            target_year -= 1
+
+        # 目标月份的第一天
+        start_date = datetime(target_year, target_month, 1, 0, 0, 0)
+
+        # 目标月份的最后一天
+        if target_month == 12:
+            next_month = datetime(target_year + 1, 1, 1)
+        else:
+            next_month = datetime(target_year, target_month + 1, 1)
+        end_date = next_month - timedelta(seconds=1)
+
+        period_description = f"{target_year}年{target_month}月"
+
+    # 3. 构建查询
+    stmt = select(
+        Bill_Category.name.label("category_name"),
+        Bill_Category.id.label("category_id"),
+        func.sum(Bill.amount).label("total_amount"),
+        func.count(Bill.id).label("bill_count")
+    ).join(
+        Bill_Category, Bill.category_id == Bill_Category.id
+    ).filter(
+        Bill.user_id == user_id,
+        Bill_Category.type == 2  # 只统计支出，收入不算占比
+    )
+
+    # 添加时间过滤（如果不是全部历史）
+    if month != -1 and start_date and end_date:
+        stmt = stmt.filter(
+            Bill.bill_time >= start_date,
+            Bill.bill_time <= end_date
+        )
+
+    # 按分类分组
+    stmt = stmt.group_by(
+        Bill_Category.name,
+        Bill_Category.id
+    ).order_by(
+        func.sum(Bill.amount).desc()  # 按金额降序排列
+    )
+
+    try:
+        results = db.execute(stmt).all()
+    except Exception:
+        return 0
+
+    # 4. 处理查询结果
+    category_data = []
+    total_amount = 0.0
+    total_bills = 0
+
+    for row in results:
+        amount = float(row.total_amount or 0)
+        count = row.bill_count or 0
+
+        category_data.append({
+            "category_id": row.category_id,
+            "category_name": row.category_name,
+            "amount": amount,
+            "count": count
+        })
+
+        total_amount += amount
+        total_bills += count
+
+    # 5. 计算占比
+    for item in category_data:
+        if total_amount > 0:
+            item["percentage"] = round((item["amount"] / total_amount) * 100, 2)
+            item["proportion"] = f"{item['percentage']}%"
+        else:
+            item["percentage"] = 0.0
+            item["proportion"] = "0%"
+
+    # 6. 处理没有消费数据的情况
+    if total_amount == 0:
+        # 尝试获取所有分类（即使没有消费）
+        all_categories = db.execute(
+            select(Bill_Category.id, Bill_Category.name)
+            .order_by(Bill_Category.id)
+        ).all()
+
+        for cat in all_categories:
+            category_data.append({
+                "category_id": cat.id,
+                "category_name": cat.name,
+                "amount": 0.0,
+                "count": 0,
+                "percentage": 0.0,
+                "proportion": "0%"
+            })
+
+    # 7. 返回结构化的结果
+    return period_description, category_data
