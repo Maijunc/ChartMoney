@@ -366,8 +366,8 @@ def budget_list_month(user_id: int, month: str, db: Session = Depends(database.g
 """
 以下是可视化接口部分
 """
-# 消费趋势分析之获取近七天数据
-@app.get("/trend/days")
+# 消费趋势分析之获取近n天数据
+@app.get("/analysis/trend/days")
 def get_trend_days(user_id: int = Query(..., ge=1),
                 days: int = Query(..., ge=7),
                 db: Session = Depends(database.get_db)
@@ -388,4 +388,50 @@ def get_trend_days(user_id: int = Query(..., ge=1),
                 "income_list": income_list,
                 "expense_list": expense_list
             }
+        }
+
+
+# 消费趋势分析之获取近n个月的数据
+@app.get("/analysis/trend/months")
+def get_trend_months(user_id: int = Query(..., ge=1),
+                     months: int = Query(..., ge=3),
+                     db: Session = Depends(database.get_db)
+                     ):
+    result = crud.get_trend_months(user_id, months, db)
+
+    if result == 0:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
+    elif result == -1:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该用户不存在")
+    else:
+        income_list, expense_list = result
+        return {
+            "code": status.HTTP_200_OK,
+            "message": "成功",
+            "months": months,
+            "data": {
+                "income_list": income_list,
+                "expense_list": expense_list
+            }
+        }
+
+
+# 可视化界面中的“近期账单”
+@app.get("/analysis/recent_bills")
+def get_recent_bill(user_id: int = Query(..., ge=1),
+                    days: int = Query(..., ge=1),
+                    db: Session = Depends(database.get_db)
+                    ):
+    result = crud.get_recent_bills(user_id, days, db)
+
+    if result == 0:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
+    elif result == -1:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该用户不存在")
+    else:
+        return{
+            "code": status.HTTP_200_OK,
+            "message": "成功",
+            "days": days,
+            "data": result
         }
