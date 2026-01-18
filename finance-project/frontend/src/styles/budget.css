@@ -50,3 +50,55 @@
   font-size: 16px;
   font-weight: bold;
 }
+/* 总预算卡片 */
+.total-budget-card {
+  padding: 20px;
+  background: #1e1e1e;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+.total-budget-card .total-amount {
+  font-size: 32px;
+  font-weight: bold;
+  color: #fff;
+}
+.total-budget-card .used-amount {
+  color: #ff6b6b;
+}
+.total-budget-card .remaining-amount {
+  color: #4ecdc4;
+}
+
+/* 分类预算卡片 */
+.category-budget-card {
+  background: #2d2d2d;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.category-budget-card .category-name {
+  font-weight: 500;
+  color: #fff;
+}
+.category-budget-card .text-red {
+  color: #ff6b6b;
+}
+.category-budget-card .text-green {
+  color: #4ecdc4;
+}
+/* 分类预算总和超出总预算时的样式 */
+.summary-over {
+  color: #f56c6c !important;
+  font-weight: bold;
+}
+
+/* 确保合计行文字居中 */
+:deep(.el-table .el-table__footer-wrapper) {
+  text-align: center;
+}
+:deep(.el-table .el-table__footer-wrapper td) {
+  background-color: #fafafa;
+}

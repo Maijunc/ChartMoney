@@ -97,15 +97,22 @@
           </el-tag>
         </div>
 
+        <!-- 修复：menu-management-panel 放在 content-panel 内部 -->
         <div class="menu-management-panel">
-          <!-- 预算设置区域 -->
           <div class="budget-setting">
             <!-- 多月份预算管理 -->
             <el-card shadow="hover" class="multi-month-budget-card">
               <template #header>
                 <div class="card-header">
                   <span>多月份预算设置</span>
-                  <el-button type="primary" size="small" icon="Plus" @click="addMonthBudget">
+                  <!-- 核心修改：添加disabled判断 -->
+                  <el-button
+                    type="primary"
+                    size="small"
+                    icon="Plus"
+                    @click="addMonthBudget"
+                    :disabled="isAllMonthsAdded"
+                  >
                     新增月份预算
                   </el-button>
                 </div>
@@ -121,7 +128,7 @@
                   <el-card shadow="hover" class="single-month-card">
                     <template #header>
                       <div class="month-card-header">
-                        <span>{{ item.month }} 月预算设置</span>
+                        <span>{{ item.month }} 月预算管理</span>
                         <el-button
                           type="danger"
                           size="small"
@@ -134,6 +141,7 @@
                       </div>
                     </template>
 
+                    <!-- 1. 月份总预算设置 -->
                     <div class="month-budget-form">
                       <el-form :model="item" inline @submit.prevent>
                         <el-form-item label="预算月份">
@@ -143,76 +151,106 @@
                             format="YYYY-MM"
                             value-format="YYYY-MM"
                             placeholder="选择月份"
-                            @change="updateMonthBudget(index)"
+                            @change="handleMonthChange(index)"
                           />
                         </el-form-item>
                         <el-form-item label="总预算金额">
                           <el-input
-                            v-model.number="item.totalAmount"
+                            v-model.number="item.totalBudget"
                             type="number"
                             placeholder="输入该月总预算"
                             min="0"
-                            @change="calculateMonthUsedAmount(index)"
+                            @change="calculateMonthTotal(index)"
                           />
                         </el-form-item>
                         <el-form-item>
-                          <el-button type="primary" @click="saveMonthBudget(index)">
-                            保存该月预算
+                          <el-button type="primary" @click="saveMonthTotalBudget(index)">
+                            保存总预算
                           </el-button>
                         </el-form-item>
                       </el-form>
 
-                      <!-- 该月预算信息 -->
-                      <div v-if="item.isSaved" class="month-budget-info">
-                        <p>
-                          {{ item.month }} 总预算：<span class="total-amount"
-                            >¥{{ item.totalAmount }}</span
+                      <!-- 月份总预算统计 -->
+                      <div v-if="item.totalBudget > 0" class="month-total-summary">
+                        <div class="summary-row">
+                          <span class="label">总预算：</span>
+                          <span class="value total">¥{{ item.totalBudget.toFixed(2) }}</span>
+                        </div>
+                        <div class="summary-row">
+                          <span class="label">总实际支出：</span>
+                          <span class="value used">¥{{ item.totalActualExpense.toFixed(2) }}</span>
+                        </div>
+                        <div class="summary-row">
+                          <span class="label">总可用金额：</span>
+                          <span
+                            class="value remaining"
+                            :class="item.totalRemaining < 0 ? 'text-red' : 'text-green'"
                           >
-                        </p>
-                        <p>
-                          已分配金额：<span
-                            :class="item.usedAmount > item.totalAmount ? 'text-red' : 'text-green'"
-                          >
-                            ¥{{ item.usedAmount }}
+                            ¥{{ Math.max(0, item.totalRemaining).toFixed(2) }}
+                            <span v-if="item.totalRemaining < 0" class="over-limit"
+                              >(超支 ¥{{ Math.abs(item.totalRemaining).toFixed(2) }})</span
+                            >
                           </span>
-                        </p>
-                        <p>
-                          剩余可分配金额：<span
-                            :class="item.remainingAmount < 0 ? 'text-red' : 'text-green'"
-                          >
-                            ¥{{ item.remainingAmount }}
-                          </span>
-                        </p>
+                        </div>
                       </div>
                     </div>
 
-                    <!-- 该月分类预算分配 -->
-                    <div v-if="item.isSaved" class="month-category-budget">
+                    <!-- 2. 分类预算设置 -->
+                    <div v-if="item.totalBudget > 0" class="category-budget-container">
+                      <div class="category-title">分类预算明细</div>
+
+                      <!-- 分类预算表格 -->
                       <el-table
                         :data="item.categoryBudgets"
                         border
+                        stripe
                         style="width: 100%; margin-top: 10px"
+                        show-summary
+                        :summary-method="
+                          ({ columns, data }) => getSummary(columns, data, item.totalBudget)
+                        "
+                        :cell-class-name="summaryCellStyle"
                       >
-                        <el-table-column prop="categoryName" label="预算类别" width="200" />
-                        <el-table-column prop="amount" label="预算金额">
+                        <el-table-column prop="categoryName" label="预算类别" width="150" />
+                        <el-table-column label="分类预算金额">
                           <template #default="scope">
                             <el-input
-                              v-model.number="scope.row.amount"
+                              v-model.number="scope.row.budgetAmount"
                               type="number"
                               min="0"
-                              @change="updateMonthCategoryBudget(index, scope.row)"
+                              size="small"
+                              @input="
+                                () => {
+                                  handleBudgetAmountInput(scope.row)
+                                  handleCategoryBudgetChange(index, scope.row.id)
+                                }
+                              "
+                              @change="handleCategoryBudgetChange(index, scope.row.id)"
                             />
                           </template>
                         </el-table-column>
-                        <el-table-column label="状态" width="120">
+                        <el-table-column prop="actualExpense" label="分类实际支出" width="120">
                           <template #default="scope">
-                            <span
-                              :class="
-                                scope.row.amount > item.totalAmount ? 'text-red' : 'text-green'
-                              "
-                            >
-                              {{ scope.row.amount > item.totalAmount ? '已超限' : '正常' }}
+                            ¥{{ scope.row.actualExpense.toFixed(2) }}
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="分类剩余金额" width="120">
+                          <template #default="scope">
+                            <span :class="scope.row.remaining < 0 ? 'text-red' : 'text-green'">
+                              ¥{{ scope.row.remaining.toFixed(2) }}
                             </span>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="80">
+                          <template #default="scope">
+                            <el-button
+                              size="small"
+                              type="primary"
+                              @click="saveCategoryBudget(index, scope.row.id)"
+                              :loading="scope.row.saving"
+                            >
+                              保存
+                            </el-button>
                           </template>
                         </el-table-column>
                       </el-table>
@@ -221,11 +259,6 @@
                 </div>
               </div>
             </el-card>
-
-            <!-- 页脚 -->
-            <footer class="dashboard-footer">
-              <p>© 2026 财智管家 - 个人财务管理系统 | 数据安全加密存储</p>
-            </footer>
           </div>
         </div>
       </div>
@@ -238,21 +271,12 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import useDashboardLogic from '@/stores/dashboardLogic.js'
-// 导入Element Plus图标
-import {
-  User,
-  House,
-  Coin,
-  Goods,
-  CreditCard,
-  Wallet,
-  Tickets,
-  DataAnalysis,
-  Tools,
-  Plus,
-  Delete,
-} from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+
+import { ElMessage, ElMessageBox } from 'element-plus'
+//导入API
+//import { fetchMonthExpense, saveMonthBudget as saveMonthBudgetToAPI } from '@/api/budgetAPI.js'
+// 导入独立的API和工具类
+//import { fetchMonthExpense, saveMonthBudget } from '@/api/budgetAPI.js'
 
 // 路由跳转逻辑
 const router = useRouter()
@@ -277,6 +301,7 @@ const handleJumpToRecord = () => {
 const handleJumpToSettings = () => {
   router.push('/settings')
 }
+
 // 获取dashboard逻辑变量
 const {
   notificationCount,
@@ -299,8 +324,8 @@ const {
   initCategoryChart,
 } = useDashboardLogic()
 
-// 预算类别列表（不变）
-const categoryList = ref([
+// 1. 固定分类列表
+const CATEGORY_LIST = [
   { id: 1, categoryName: '餐饮美食' },
   { id: 2, categoryName: '交通出行' },
   { id: 3, categoryName: '居住房租' },
@@ -308,129 +333,276 @@ const categoryList = ref([
   { id: 5, categoryName: '休闲娱乐' },
   { id: 6, categoryName: '医疗健康' },
   { id: 7, categoryName: '其他' },
-])
+]
 
-// 多月份预算核心数据
+// 2. 月份预算核心数据
 const monthBudgetList = ref([])
 
-// 初始化默认月份预算（当前月）
-const initDefaultMonthBudget = () => {
-  const now = new Date()
-  const defaultMonth = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`
+// 3. 模拟获取分类实际支出（替代API，可替换为真实接口）
+const getCategoryActualExpense = (month) => {
+  // 模拟支出数据（实际项目中替换为从支出表查询）
+  const mockExpense = {
+    1: Math.floor(Math.random() * 1000), // 餐饮美食
+    2: Math.floor(Math.random() * 500), // 交通出行
+    3: Math.floor(Math.random() * 2000), // 居住房租
+    4: Math.floor(Math.random() * 800), // 购物消费
+    5: Math.floor(Math.random() * 600), // 休闲娱乐
+    6: Math.floor(Math.random() * 300), // 医疗健康
+    7: Math.floor(Math.random() * 200), // 其他
+  }
 
-  // 初始化默认月份预算项
+  return CATEGORY_LIST.map((category) => ({
+    ...category,
+    actualExpense: mockExpense[category.id], // 分类实际支出
+    budgetAmount: 0, // 分类预算金额
+    remaining: 0, // 分类剩余金额
+  }))
+}
+
+// 5. 初始化默认月份预算（修改：默认创建1月预算）
+const initDefaultMonthBudget = () => {
+  const currentYear = new Date().getFullYear()
+  const defaultMonth = `${currentYear}-01` // 默认创建1月
+
+  const categoryBudgets = getCategoryActualExpense(defaultMonth)
+  const totalActualExpense = categoryBudgets.reduce((sum, item) => sum + item.actualExpense, 0)
+
   monthBudgetList.value = [
     {
-      month: defaultMonth, // 预算月份
-      totalAmount: 0, // 该月总预算
-      isSaved: false, // 是否已保存
-      usedAmount: 0, // 已分配金额
-      remainingAmount: 0, // 剩余金额
-      categoryBudgets: categoryList.value.map((item) => ({ ...item, amount: 0 })), // 分类预算
+      month: defaultMonth,
+      totalBudget: 0,
+      totalActualExpense: totalActualExpense,
+      totalRemaining: 0,
+      categoryBudgets: categoryBudgets,
     },
   ]
 }
 
-// 新增月份预算
+// 6. 改造后的新增月份预算函数
 const addMonthBudget = () => {
-  const now = new Date()
-  // 新增月份默认是下一个月
-  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
-  const newMonth = `${nextMonth.getFullYear()}-${(nextMonth.getMonth() + 1).toString().padStart(2, '0')}`
+  const currentYear = new Date().getFullYear()
 
-  // 检查是否已存在该月份
-  const isExist = monthBudgetList.value.some((item) => item.month === newMonth)
-  if (isExist) {
-    ElMessage.warning(`已存在${newMonth}的预算设置，请选择其他月份`)
+  // 获取已添加的月份数字（如 [1,2,3]）
+  const addedMonths = monthBudgetList.value.map((item) => {
+    const [year, month] = item.month.split('-')
+    return parseInt(month)
+  })
+
+  // 找到下一个未添加的月份（从1开始）
+  let nextMonthNum = 1
+  while (addedMonths.includes(nextMonthNum) && nextMonthNum <= 12) {
+    nextMonthNum++
+  }
+
+  // 如果已经到12月，提示并返回
+  if (nextMonthNum > 12) {
+    ElMessage.warning('已添加1-12月所有月份的预算，无法继续新增')
     return
   }
 
+  // 格式化月份（补零，如 2 → 02）
+  const newMonth = `${currentYear}-${nextMonthNum.toString().padStart(2, '0')}`
+
+  // 获取新月份实际支出
+  const categoryBudgets = getCategoryActualExpense(newMonth)
+  const totalActualExpense = categoryBudgets.reduce((sum, item) => sum + item.actualExpense, 0)
+
+  // 添加新月份预算
   monthBudgetList.value.push({
     month: newMonth,
-    totalAmount: 0,
-    isSaved: false,
-    usedAmount: 0,
-    remainingAmount: 0,
-    categoryBudgets: categoryList.value.map((item) => ({ ...item, amount: 0 })),
+    totalBudget: 0,
+    totalActualExpense: totalActualExpense,
+    totalRemaining: 0,
+    categoryBudgets: categoryBudgets,
   })
+
+  ElMessage.success(`成功新增${newMonth}月份预算`)
 }
 
-// 删除月份预算（至少保留1个）
+// 5-3. 计算属性：判断是否已添加1-12月所有月份
+const isAllMonthsAdded = computed(() => {
+  // 获取已添加的月份（提取月份数字）
+  const addedMonths = monthBudgetList.value.map((item) => {
+    const [year, month] = item.month.split('-')
+    return parseInt(month)
+  })
+  // 检查是否包含1-12所有月份
+  return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].every((month) => addedMonths.includes(month))
+})
+
+// 6. 删除月份预算
 const deleteMonthBudget = (index) => {
   if (monthBudgetList.value.length <= 1) {
-    ElMessage.warning('至少需要保留一个月份的预算设置')
+    ElMessage.warning('至少保留一个月份的预算设置')
     return
   }
   monthBudgetList.value.splice(index, 1)
   ElMessage.success('月份预算删除成功')
 }
 
-// 更新月份（防止重复）
-const updateMonthBudget = (index) => {
+// 7. 月份变更处理
+const handleMonthChange = async (index) => {
   const currentItem = monthBudgetList.value[index]
-  // 检查是否与其他月份重复
-  const duplicateIndex = monthBudgetList.value.findIndex((item, i) => {
-    return i !== index && item.month === currentItem.month
-  })
-
+  // 检查重复
+  const duplicateIndex = monthBudgetList.value.findIndex(
+    (item, i) => i !== index && item.month === currentItem.month,
+  )
   if (duplicateIndex !== -1) {
-    ElMessage.warning(`已存在${currentItem.month}的预算设置，请选择其他月份`)
-    // 恢复原月份
+    ElMessage.warning(`已存在${currentItem.month}的预算，请选择其他月份`)
     const now = new Date()
-    monthBudgetList.value[index].month =
-      `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`
-  }
-}
-
-// 保存该月预算
-const saveMonthBudget = (index) => {
-  const currentItem = monthBudgetList.value[index]
-  if (!currentItem.month || currentItem.totalAmount <= 0) {
-    ElMessage.warning('请填写有效的月份和预算金额')
+    currentItem.month = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`
     return
   }
 
-  // 计算已分配和剩余金额
-  calculateMonthUsedAmount(index)
-
-  currentItem.isSaved = true
-  ElMessage.success(`${currentItem.month}预算设置成功`)
+  // 更新该月实际支出数据
+  currentItem.categoryBudgets = getCategoryActualExpense(currentItem.month)
+  currentItem.totalActualExpense = currentItem.categoryBudgets.reduce(
+    (sum, item) => sum + item.actualExpense,
+    0,
+  )
+  // 重新计算总剩余
+  calculateMonthTotal(index)
 }
 
-// 计算该月已使用金额和剩余金额
-const calculateMonthUsedAmount = (index) => {
+// 8. 计算月份总剩余金额
+const calculateMonthTotal = (index) => {
   const currentItem = monthBudgetList.value[index]
-  // 计算已分配金额
-  const used = currentItem.categoryBudgets.reduce((sum, item) => sum + item.amount, 0)
-  currentItem.usedAmount = used
-  // 计算剩余金额
-  currentItem.remainingAmount = currentItem.totalAmount - used
+  // 总剩余 = 总预算 - 总实际支出
+  currentItem.totalRemaining = currentItem.totalBudget - currentItem.totalActualExpense
+
+  // 同步更新分类剩余（如果分类预算已设置）
+  currentItem.categoryBudgets.forEach((category) => {
+    if (category.budgetAmount > 0) {
+      category.remaining = category.budgetAmount - category.actualExpense
+    }
+  })
 }
 
-// 更新该月分类预算
-const updateMonthCategoryBudget = (monthIndex, row) => {
+// 9. 计算分类剩余金额
+const calculateCategoryRemaining = (monthIndex, categoryId) => {
   const currentItem = monthBudgetList.value[monthIndex]
-  if (!currentItem.isSaved) {
-    ElMessage.warning('请先保存该月总预算后再设置分类预算')
-    row.amount = 0
+  const category = currentItem.categoryBudgets.find((item) => item.id === categoryId)
+
+  if (category) {
+    // 分类剩余 = 分类预算 - 分类实际支出
+    category.remaining = category.budgetAmount - category.actualExpense
+  }
+
+  // 重新计算总剩余（可选）
+  calculateMonthTotal(monthIndex)
+}
+
+// 10. 保存月份总预算
+const saveMonthTotalBudget = (index) => {
+  const currentItem = monthBudgetList.value[index]
+  if (currentItem.totalBudget <= 0) {
+    ElMessage.warning('请输入有效的总预算金额（大于0）')
     return
   }
 
-  // 计算最新的已分配金额
-  calculateMonthUsedAmount(monthIndex)
+  // 计算总剩余
+  calculateMonthTotal(index)
+  ElMessage.success(`${currentItem.month} 总预算保存成功`)
+}
 
-  if (row.amount > currentItem.totalAmount) {
-    ElMessage.warning(`${currentItem.month}的该分类预算不能超过总预算¥${currentItem.totalAmount}`)
+// 实时校验单个分类预算是否超限（必须存在）
+const checkSingleCategoryOverTotal = (
+  totalBudget,
+  categoryBudgets,
+  currentCategoryId,
+  newBudgetAmount,
+) => {
+  // 计算除当前分类外的其他分类预算总和
+  const otherCategoriesTotal = categoryBudgets.reduce((sum, item) => {
+    if (item.id === currentCategoryId) return sum
+    return sum + (item.budgetAmount || 0)
+  }, 0)
+
+  // 计算加上当前分类新预算后的总分类预算
+  const newTotal = otherCategoriesTotal + newBudgetAmount
+
+  return {
+    isOver: newTotal > totalBudget,
+    newTotal,
+    overAmount: newTotal - totalBudget,
+    totalBudget,
   }
 }
 
-// 页面挂载初始化
+// 11. 保存分类预算
+// BudgetView.vue 中的 saveCategoryBudget 函数
+const saveCategoryBudget = (monthIndex, categoryId) => {
+  const currentItem = monthBudgetList.value[monthIndex]
+  const category = currentItem.categoryBudgets.find((item) => item.id === categoryId)
+
+  // 1. 前置校验：分类不存在则返回
+  if (!category) return
+
+  // 2. 添加loading状态（防止重复点击）
+  category.saving = true
+
+  try {
+    // 3. 负数校验（和实时校验一致，双重保障）
+    if (category.budgetAmount < 0 || isNaN(category.budgetAmount)) {
+      ElMessage.warning('分类预算金额不能为负数，请输入大于等于0的数值！')
+      category.budgetAmount = 0
+      calculateCategoryRemaining(monthIndex, categoryId) // 强制刷新剩余金额
+      return
+    }
+
+    // 4. 总预算为0的校验
+    if (currentItem.totalBudget <= 0) {
+      ElMessage.warning('请先设置并保存该月份的总预算！')
+      return
+    }
+
+    // 5. 最终超限校验（更严格的校验）
+    const checkResult = checkSingleCategoryOverTotal(
+      currentItem.totalBudget,
+      currentItem.categoryBudgets,
+      categoryId,
+      category.budgetAmount,
+    )
+
+    if (checkResult.isOver) {
+      ElMessageBox.alert(
+        `已超出预算！当前分类预算设置后，所有分类预算总和（¥${checkResult.newTotal.toFixed(2)}）将超出总预算（¥${checkResult.totalBudget.toFixed(2)}）¥${checkResult.overAmount.toFixed(2)}`,
+        '保存失败',
+        { type: 'error' },
+      )
+      category.budgetAmount = 0
+      calculateCategoryRemaining(monthIndex, categoryId) // 刷新剩余金额
+      return
+    }
+
+    // 6. 模拟API保存（核心价值：持久化操作）
+    // 实际项目中替换为真实的接口调用
+    setTimeout(() => {
+      // 强制刷新剩余金额（确保100%同步）
+      calculateCategoryRemaining(monthIndex, categoryId)
+
+      // 成功提示（更友好）
+      ElMessage.success(
+        `${category.categoryName} 预算已成功保存！剩余金额：¥${category.remaining.toFixed(2)}`,
+      )
+
+      // 可在这里添加本地存储/缓存逻辑
+      // localStorage.setItem(`budget_${currentItem.month}_${categoryId}`, category.budgetAmount)
+    }, 500)
+  } catch (error) {
+    ElMessage.error(`${category.categoryName} 预算保存失败：${error.message}`)
+  } finally {
+    // 移除loading状态
+    category.saving = false
+  }
+}
+// 12. 页面挂载初始化
 onMounted(() => {
-  // 初始化默认月份预算
   initDefaultMonthBudget()
 })
+// ========== 核心业务逻辑结束 ==========
 
-// 顶部标签页数据（修复activePath初始值匹配）
+// 原有标签页逻辑（完全不变）
 const tagsList = ref([
   { key: 'dashboard', label: '仪表盘' },
   { key: 'user', label: '首页' },
@@ -440,9 +612,8 @@ const tagsList = ref([
   { key: 'DataAnalysis', label: '消费年度总结' },
   { key: 'Tools', label: '设置' },
 ])
-const activePath = ref('dashboard') // 修复：匹配标签页key，而非path
+const activePath = ref('dashboard')
 
-// 页面内标签页数据（修复key匹配）
 const pageTagsList = ref([
   { key: 'dashboard', label: '仪表盘' },
   { key: 'user', label: '首页' },
@@ -451,9 +622,8 @@ const pageTagsList = ref([
   { key: 'Tickets', label: '购物预算管理' },
   { key: 'DataAnalysis', label: '消费年度总结' },
 ])
-const activePageKey = ref('dashboard') // 修复：初始值匹配标签页key
+const activePageKey = ref('dashboard')
 
-// 顶部标签页-关闭（修复判断key而非path）
 const handleCloseTag = (index) => {
   const closedTag = tagsList.value[index]
   tagsList.value.splice(index, 1)
@@ -462,12 +632,10 @@ const handleCloseTag = (index) => {
   }
 }
 
-// 顶部标签页-点击切换
 const handleTagClick = (key) => {
   activePath.value = key
 }
 
-// 页面内标签页-关闭
 const handleClosePageTag = (index) => {
   const closedTag = pageTagsList.value[index]
   pageTagsList.value.splice(index, 1)
@@ -476,12 +644,10 @@ const handleClosePageTag = (index) => {
   }
 }
 
-// 页面内标签页-点击切换
 const handlePageTagClick = (key) => {
   activePageKey.value = key
 }
 
-// 左侧菜单选择（修复labelMap匹配）
 const handleMenuSelect = (key) => {
   const tagExists = pageTagsList.value.some((item) => item.key === key)
   if (!tagExists) {
@@ -500,10 +666,220 @@ const handleMenuSelect = (key) => {
   }
   activePageKey.value = key
 }
+
+// 计算分类预算总和（隐藏算法）
+const _calculateCategoryBudgetTotal = (categoryBudgets) => {
+  return categoryBudgets.reduce((sum, item) => sum + (item.budgetAmount || 0), 0)
+}
+
+// 校验是否超出总预算（隐藏算法）
+const _checkCategoryBudgetOverTotal = (totalBudget, categoryBudgets) => {
+  const categoryTotal = _calculateCategoryBudgetTotal(categoryBudgets)
+  return categoryTotal > totalBudget
+}
+
+const handleCategoryBudgetChange = (monthIndex, categoryId) => {
+  const currentItem = monthBudgetList.value[monthIndex]
+  const category = currentItem.categoryBudgets.find((item) => item.id === categoryId)
+
+  if (currentItem.totalBudget <= 0) {
+    ElMessage.warning('请先设置并保存该月份的总预算！')
+    category.budgetAmount = 0
+    calculateCategoryRemaining(monthIndex, categoryId) // 实时刷新剩余金额
+    return
+  }
+
+  // 实时校验当前分类是否导致总分类预算超出总预算
+  const checkResult = checkSingleCategoryOverTotal(
+    currentItem.totalBudget,
+    currentItem.categoryBudgets,
+    categoryId,
+    category.budgetAmount,
+  )
+
+  if (checkResult.isOver) {
+    // 红色提示：当前分类预算导致总分类预算超出
+    ElMessage.error(
+      `已超出预算！当前分类预算设置后，所有分类预算总和（¥${checkResult.newTotal.toFixed(2)}）将超出总预算（¥${checkResult.totalBudget.toFixed(2)}）¥${checkResult.overAmount.toFixed(2)}`,
+    )
+    // 重置当前分类预算
+    category.budgetAmount = 0
+    // 实时计算剩余金额
+    calculateCategoryRemaining(monthIndex, categoryId)
+    return
+  }
+
+  // 未超出时实时计算剩余金额（核心修复：直接调用函数，不赋值）
+  calculateCategoryRemaining(monthIndex, categoryId)
+}
+
+// 监听分类预算金额输入，禁止负数并提示
+const handleBudgetAmountInput = (row) => {
+  // 如果输入负数，强制重置为0并提示
+  if (row.budgetAmount < 0) {
+    ElMessage.warning('分类预算金额不能为负数，请输入大于等于0的数值！')
+    row.budgetAmount = 0 // 强制重置为0
+  }
+}
+
+// ========== 表格合计行功能 ==========
+// 计算合计行内容
+/*const getSummary = (columns, data, totalBudget) => {
+  const sums = []
+  columns.forEach((column, index) => {
+    if (index === 0) {
+      sums[index] = '分类预算总和'
+    } else if (column.label === '分类预算金额') {
+      // 计算所有分类预算的总和
+      const total = data.reduce((sum, item) => sum + (item.budgetAmount || 0), 0)
+      // 返回包含状态的对象，用于样式控制
+      sums[index] = {
+        value:
+          total > totalBudget
+            ? `¥${total.toFixed(2)} (超出 ¥${(total - totalBudget).toFixed(2)})`
+            : `¥${total.toFixed(2)}`,
+        isOver: total > totalBudget,
+        overAmount: total > totalBudget ? total - totalBudget : 0,
+      }
+    } else {
+      sums[index] = '' // 其他列合计行留空
+    }
+  })
+  return sums
+}*/
+// 计算合计行内容（修复 [object Object] 问题）
+const getSummary = (columns, data, totalBudget) => {
+  const sums = []
+  columns.forEach((column, index) => {
+    if (index === 0) {
+      sums[index] = '分类预算总和'
+    } else if (column.label === '分类预算金额') {
+      // 计算所有分类预算的总和
+      const total = data.reduce((sum, item) => sum + (item.budgetAmount || 0), 0)
+      // 直接返回纯字符串（关键修复）
+      if (total > totalBudget) {
+        sums[index] = `¥${total.toFixed(2)} (超出 ¥${(total - totalBudget).toFixed(2)})`
+      } else {
+        sums[index] = `¥${total.toFixed(2)}`
+      }
+    } else {
+      sums[index] = '' // 其他列合计行留空
+    }
+  })
+  return sums
+}
+
+// 控制合计行单元格样式（适配纯字符串）
+const summaryCellStyle = ({ row, column, rowIndex, columnIndex, tableData }) => {
+  // 仅对合计行（rowIndex=-1）生效
+  if (rowIndex === -1) {
+    // 仅对分类预算金额列（columnIndex=1）生效
+    if (columnIndex === 1) {
+      // 重新计算总和判断是否超限
+      const totalBudget = row[0] === '分类预算总和' ? tableData[0]?.totalBudget : 0
+      const total = tableData.reduce((sum, item) => sum + (item.budgetAmount || 0), 0)
+      if (total > totalBudget && totalBudget > 0) {
+        return 'summary-over' // 超出预算的样式类
+      }
+    }
+  }
+}
+// ========== 表格合计行功能结束 ==========
 </script>
 
 <style scoped>
 @import '../styles/framework.css';
 @import '../styles/finance-dashboard.css';
 @import '../styles/budget.css';
+
+/* 新增必要的样式 */
+.month-budget-summary-card {
+  background: #f5f7fa;
+  padding: 16px;
+  border-radius: 8px;
+  margin: 16px 0;
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.summary-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.summary-item label {
+  color: #666;
+  font-size: 14px;
+}
+.total-amount {
+  color: #1989fa;
+  font-weight: bold;
+  font-size: 16px;
+}
+.actual-expense {
+  color: #f56c6c;
+  font-weight: bold;
+  font-size: 16px;
+}
+.text-red {
+  color: #f56c6c !important;
+}
+.text-green {
+  color: #67c23a !important;
+}
+.over-limit {
+  font-size: 12px;
+  color: #f56c6c;
+  margin-left: 4px;
+}
+.category-budget-cards {
+  margin-top: 20px;
+}
+.card-title {
+  font-size: 15px;
+  font-weight: bold;
+  margin-bottom: 12px;
+  color: #333;
+}
+.category-card {
+  background: #fff;
+  border: 1px solid #e6e6e6;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.category-header {
+  border-bottom: 1px solid #f0f0f0;
+  padding-bottom: 8px;
+}
+.category-name {
+  font-weight: 500;
+  color: #333;
+}
+.category-stats {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 8px 0;
+}
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+.stat-item label {
+  color: #666;
+}
+.category-edit {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
+}
+.category-edit .el-input {
+  width: 120px;
+}
 </style>
