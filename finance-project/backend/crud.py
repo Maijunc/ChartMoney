@@ -748,6 +748,7 @@ def get_trend_days(user_id: int, days: int, db: Session):
 
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days-1)   # 回溯到n-1天前
+    start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
 
     # 1. 生成完整的日期列表
     date_range = []
@@ -810,3 +811,159 @@ def get_trend_days(user_id: int, days: int, db: Session):
         })
 
     return income_list, expense_list
+
+
+# 获取近n个月的消费数据
+def get_trend_months(user_id: int, months: int, db: Session):
+    stmt = select(User).filter(User.id == user_id)
+    try:
+        user = db.scalar(stmt)
+    except Exception:
+        return 0
+    if user is None:
+        return -1
+
+    # 2. 计算日期范围
+    end_date = datetime.now()
+
+    # 计算N个月前的第一天（确保整月）
+    # 例如：今天是2024-03-15，近3个月就是：2024-01, 2024-02, 2024-03
+    if end_date.day > 1:
+        # 从本月1号开始算
+        start_date = end_date.replace(day=1)
+        # 再往前推(months-1)个月
+        for _ in range(months - 1):
+            # 计算上个月1号
+            if start_date.month == 1:
+                start_date = start_date.replace(year=start_date.year - 1, month=12)
+            else:
+                start_date = start_date.replace(month=start_date.month - 1)
+    else:
+        # 如果今天是1号，从本月开始算
+        start_date = end_date.replace(day=1)
+        # 再往前推(months-1)个月
+        for _ in range(months - 1):
+            if start_date.month == 1:
+                start_date = start_date.replace(year=start_date.year - 1, month=12)
+            else:
+                start_date = start_date.replace(month=start_date.month - 1)
+
+    # 给日期填充时间部分，以免第一天的数据无法获取
+    start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # 生成月份列表
+    month_range = []
+    current = start_date
+    while current <= end_date:
+        month_str = current.strftime("%Y-%m")
+        month_range.append(month_str)
+
+        # 计算下个月1号
+        if current.month == 12:
+            current = current.replace(year=current.year + 1, month=1)
+        else:
+            current = current.replace(month=current.month + 1)
+
+    # 方法1：先查询所有数据，在Python中聚合
+    stmt = select(
+        Bill.bill_time,
+        Bill_Category.type.label("category_type"),
+        Bill.amount
+    ).outerjoin(
+        Bill_Category, Bill.category_id == Bill_Category.id
+    ).filter(
+        Bill.user_id == user_id,
+        Bill_Category.type.in_([1, 2]),
+        Bill.bill_time >= start_date,
+        Bill.bill_time <= end_date
+    )
+
+    try:
+        results = db.execute(stmt).all()
+    except Exception:
+        return 0
+
+    # 在Python中按月聚合
+    income_dict = defaultdict(float)
+    expense_dict = defaultdict(float)
+
+    for row in results:
+        if row.bill_time:
+            month_key = row.bill_time.strftime("%Y-%m")
+            if row.category_type == 1:  # 收入
+                income_dict[month_key] += float(row.amount or 0)
+            elif row.category_type == 2:  # 支出
+                expense_dict[month_key] += float(row.amount or 0)
+
+    # 6. 填充完整的月份列表
+    income_list = []
+    expense_list = []
+
+    for month in month_range:
+        # 解析年月
+        year_str, month_str = month.split('-')
+        year = int(year_str)
+        month_num = int(month_str)
+
+        # 收入列表
+        income_amount = income_dict.get(month, 0.0)
+        income_list.append({
+            "time": month,
+            "amount": income_amount,
+        })
+
+        # 支出列表
+        expense_amount = expense_dict.get(month, 0.0)
+        expense_list.append({
+            "time": month,
+            "amount": expense_amount,
+        })
+
+    return income_list, expense_list
+
+
+# 获取近期账单
+def get_recent_bills(user_id: int, days: int, db: Session):
+    stmt = select(User).filter(User.id == user_id)
+    try:
+        user = db.scalar(stmt)
+    except Exception:
+        return 0
+    if user is None:
+        return -1
+
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=days - 1)  # 回溯到n-1天前
+
+    start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    stmt = select(
+        Bill.bill_time,
+        Bill_Category.name.label("category_name"),
+        Bill.amount,
+        Bill_Category.type.label("type"),
+        Bill.remark
+    ).join(
+        Bill_Category, Bill.category_id == Bill_Category.id
+    ).filter(
+        Bill.user_id == user_id,
+        Bill.bill_time >= start_date,
+        Bill.bill_time <= end_date
+    ).order_by(desc(Bill.bill_time))
+
+    try:
+        bills = db.execute(stmt).all()
+    except Exception:
+        return 0
+
+    result_list = []
+    for bill in bills:
+        result_list.append({
+            "bill_time": bill.bill_time,
+            "category_name": bill.category_name,
+            "amount": bill.amount,
+            "type": bill.type,
+            "remark": bill.remark
+        })
+
+    return result_list
