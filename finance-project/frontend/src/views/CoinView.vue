@@ -209,20 +209,22 @@
                 </template>
               </el-table-column>
 
-              <!-- 收入类型列（可编辑） -->
-              <el-table-column prop="ctype" label="收入类型" width="120" align="center">
+              <!-- 收入类型列（可编辑，动态加载分类） -->
+              <el-table-column prop="ctype" label="收入类型" width="150" align="center">
                 <template #default="scope">
                   <el-select
                     v-if="scope.row.isEditing"
                     v-model="scope.row.ctype"
                     style="width: 100%"
                     placeholder="选择类型"
+                    @change="handleCategoryChange(scope.row)"
                   >
-                    <el-option label="工资" value="工资"></el-option>
-                    <el-option label="理财收益" value="理财收益"></el-option>
-                    <el-option label="兼职收入" value="兼职收入"></el-option>
-                    <el-option label="奖金" value="奖金"></el-option>
-                    <el-option label="其他" value="其他"></el-option>
+                    <el-option
+                      v-for="cat in incomeCategoryList"
+                      :key="cat.category_id"
+                      :label="cat.name"
+                      :value="cat.name"
+                    />
                   </el-select>
                   <el-tag v-else :type="getTagType(scope.row.ctype)">{{ scope.row.ctype }}</el-tag>
                 </template>
@@ -243,6 +245,27 @@
                   <span v-else style="color: #4caf50; font-weight: 500"
                     >+{{ Number(scope.row.amount).toFixed(2) }}</span
                   >
+                </template>
+              </el-table-column>
+
+              <!-- 支付方式列（新增，可编辑） -->
+              <el-table-column prop="paymentMethod" label="支付方式" width="120" align="center">
+                <template #default="scope">
+                  <el-select
+                    v-if="scope.row.isEditing"
+                    v-model="scope.row.paymentMethod"
+                    style="width: 100%"
+                    placeholder="选择支付方式"
+                    @change="handlePaymentChange(scope.row)"
+                  >
+                    <el-option
+                      v-for="method in paymentMethodList"
+                      :key="method.method_id"
+                      :label="method.name"
+                      :value="method.name"
+                    />
+                  </el-select>
+                  <span v-else>{{ scope.row.paymentMethod || '未设置' }}</span>
                 </template>
               </el-table-column>
 
@@ -289,7 +312,7 @@
                     <el-button type="primary" size="small" @click="handleEditIncome(scope.row)"
                       >编辑</el-button
                     >
-                    <el-button type="danger" size="small" @click="handleDeleteIncome(scope.row.id)"
+                    <el-button type="danger" size="small" @click="handleDeleteIncome(scope.row.bill_id)"
                       >删除</el-button
                     >
                   </template>
@@ -332,9 +355,25 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 // 导入xlsx库用于导出Excel
 import * as XLSX from 'xlsx'
+// ========== 导入API和工具类 ==========
+import { getBillList, addBill, updateBill, deleteBill, batchDeleteBill, BillTransformer } from '@/api/bill'
+import { CategoryMapper } from '@/api/category'
+import { PaymentMethodMapper } from '@/api/payment'
+import { useUserStore } from '@/stores/user'
 
 // 路由跳转逻辑
 const router = useRouter()
+// ==========  获取用户信息 ==========
+const userStore = useUserStore()
+
+// ========== 初始化映射器 ==========
+const categoryMapper = new CategoryMapper()
+const paymentMapper = new PaymentMethodMapper()
+const isDataLoading = ref(false) // 数据加载状态
+
+// ========== 动态加载的分类和支付方式列表 ==========
+const incomeCategoryList = ref([]) // 收入分类列表（用于下拉框）
+const paymentMethodList = ref([]) // 支付方式列表（用于下拉框）
 const handleJumpToExpend = () => {
   router.push('/expend')
 }
@@ -360,15 +399,38 @@ const handleJumpToSettings = () => {
 // 获取dashboard逻辑变量（移除未使用的变量，减少冗余）
 const { initTrendChart, initCategoryChart } = useDashboardLogic()
 
-// 页面挂载初始化图表
-onMounted(() => {
+// ========== 页面挂载初始化 ==========
+onMounted(async () => {
   // 增加DOM存在性判断，防止图表初始化失败
   setTimeout(() => {
     initTrendChart()
     initCategoryChart()
   }, 100)
-  // 初始化收入数据
-  initIncomeData()
+
+  // 初始化分类和支付方式映射
+  console.log('🔄 开始初始化收入页面数据...')
+
+  try {
+    // 并行初始化分类和支付方式映射
+    await Promise.all([
+      categoryMapper.init(),
+      paymentMapper.init()
+    ])
+
+    console.log('✅ 分类和支付方式映射初始化成功')
+
+    // 获取分类和支付方式列表（用于下拉框）
+    incomeCategoryList.value = categoryMapper.incomeCategories
+    paymentMethodList.value = paymentMapper.getPaymentMethodList()
+
+    // 初始化收入数据（从后端加载）
+    await initIncomeData()
+
+    console.log('✅ 收入页面数据初始化完成')
+  } catch (error) {
+    console.error('❌ 收入数据初始化失败:', error)
+    ElMessage.error('数据加载失败，请刷新页面重试')
+  }
 })
 
 // 顶部标签页数据（修复activePath初始值匹配）
@@ -469,19 +531,82 @@ const sortDataByDate = (data) => {
   })
 }
 
+// ==========  修改为从后端加载真实数据 ==========
 // 初始化收入数据
-const initIncomeData = () => {
+const initIncomeData = async () => {
+  // 如果用户未登录，使用模拟数据
+  if (!userStore.isLogin) {
+    console.warn('⚠️ 用户未登录，使用模拟数据')
+    loadMockIncomeData()
+    return
+  }
+
+  try {
+    isDataLoading.value = true
+
+    // 调用后端API获取收入列表（type=1 表示收入）
+    // 不传递 the_time 参数，获取所有数据
+    const res = await getBillList({
+      user_id: userStore.userId,
+      page: currentPage.value,
+      page_size: pageSize.value,
+      type: 1  // 1 = 收入
+    })
+
+    if (res.code === 200 && res.data) {
+      // 转换后端数据为前端格式
+      const convertedData = res.data.map(billData => {
+        const categoryName = categoryMapper.getIncomeCategoryName(billData.category_id) || '其他'
+        const paymentMethodName = paymentMapper.getPaymentMethodName(billData.method_id) || '未知'
+
+        const incomeData = BillTransformer.backendToIncome(billData, categoryName)
+
+        // 添加前端需要的额外字段
+        return {
+          ...incomeData,
+          bill_id: billData.id,  // 保存账单ID用于修改和删除
+          category_id: billData.category_id,
+          method_id: billData.method_id,
+          paymentMethod: paymentMethodName
+        }
+      })
+
+      // 按日期降序排序
+      const sortedData = sortDataByDate(convertedData)
+
+      incomeList.value = sortedData
+      originIncomeList.value = [...sortedData]
+      totalIncome.value = res.total || sortedData.length
+
+      console.log('✅ 收入数据加载成功:', sortedData.length, '条')
+    } else {
+      throw new Error('数据格式错误')
+    }
+  } catch (error) {
+    console.error('❌ 收入数据加载失败:', error)
+    ElMessage.error('加载收入数据失败，使用模拟数据')
+    loadMockIncomeData()
+  } finally {
+    isDataLoading.value = false
+  }
+}
+
+// 加载模拟数据（兜底方案）
+const loadMockIncomeData = () => {
   // 生成模拟数据（50条，用于测试分页）
   const mockData = []
   const types = ['工资', '理财收益', '兼职收入', '奖金', '其他']
   const sources = ['公司打卡', '支付宝理财', '副业接单', '年终奖金', '亲友转账', '稿费', '投资分红']
   const remarks = ['', '本月绩效奖金', '加班补贴', '理财到期收益', '兼职设计费用', '无备注']
+  const paymentMethods = ['微信', '支付宝', '现金', '银行卡']
 
   for (let i = 1; i <= 50; i++) {
-    const randomType = types[Math.floor(Math.random() * types.length)]
+    const randomTypeIdx = Math.floor(Math.random() * types.length)
+    const randomType = types[randomTypeIdx]
     const randomSource = sources[Math.floor(Math.random() * sources.length)]
     const randomRemark = remarks[Math.floor(Math.random() * remarks.length)]
     const randomAmount = (Math.random() * 10000 + 100).toFixed(2)
+    const randomPayment = paymentMethods[Math.floor(Math.random() * paymentMethods.length)]
 
     // 生成随机日期（近6个月）
     const date = new Date()
@@ -492,19 +617,20 @@ const initIncomeData = () => {
     mockData.push({
       id: i,
       date: formatDate,
-      ctype: randomType, // 保持与表格匹配的 ctype 字段
+      ctype: randomType,
+      category_id: randomTypeIdx + 1,
       amount: Number(randomAmount),
       source: randomSource,
+      paymentMethod: randomPayment,
+      method_id: Math.floor(Math.random() * 4) + 1,
       remark: randomRemark,
-      isEditing: false, // 新增：编辑状态标识
+      isEditing: false,
     })
   }
 
-  // ========== 核心修改：初始化时按日期降序排列 ==========
   const sortedData = sortDataByDate(mockData)
-
   incomeList.value = sortedData
-  originIncomeList.value = [...sortedData] // 保存排序后的原始数据
+  originIncomeList.value = [...sortedData]
   totalIncome.value = sortedData.length
 }
 
@@ -521,26 +647,51 @@ const handleAddRow = () => {
   const today = new Date()
   const formatDate = today.toISOString().split('T')[0]
 
-  // 新增空行数据（匹配收入数据格式）
+  // 获取默认支付方式
+  const defaultPaymentMethod = paymentMethodList.value.length > 0
+    ? paymentMethodList.value[0].name
+    : ''
+  const defaultMethodId = paymentMapper.getDefaultPaymentMethodId() || 1
+
+  // 新增空行数据（匹配后端需要的字段）
   const newRow = {
     id: getNewId(),
-    date: formatDate, // 默认当前日期
+    date: formatDate,
     ctype: '',
+    category_id: null,  // 后端需要的分类ID
     amount: '',
     source: '',
+    paymentMethod: defaultPaymentMethod,  // 显示用的支付方式名称
+    method_id: defaultMethodId,  // 后端需要的支付方式ID
     remark: '',
-    isEditing: true, // 新增行默认进入编辑状态
+    isEditing: true,
   }
 
   // 添加到列表头部（方便编辑）
   incomeList.value.unshift(newRow)
-  originIncomeList.value.unshift(newRow) // 同步原始数据
+  originIncomeList.value.unshift(newRow)
   totalIncome.value = incomeList.value.length
-  currentPage.value = 1 // 跳转到第一页
+  currentPage.value = 1
 }
 
-// 保存编辑行
-const handleSaveRow = (row) => {
+// ========== 处理分类改变 ==========
+const handleCategoryChange = (row) => {
+  // 当用户选择分类时，自动设置 category_id
+  if (row.ctype) {
+    row.category_id = categoryMapper.getIncomeCategoryId(row.ctype)
+  }
+}
+
+// ========== 处理支付方式改变 ==========
+const handlePaymentChange = (row) => {
+  // 当用户选择支付方式时，自动设置 method_id
+  if (row.paymentMethod) {
+    row.method_id = paymentMapper.getPaymentMethodId(row.paymentMethod)
+  }
+}
+
+// 保存编辑行（调用真实API）
+const handleSaveRow = async (row) => {
   // 基础校验
   if (!row.date) {
     ElMessage.warning('请选择收入日期！')
@@ -558,19 +709,64 @@ const handleSaveRow = (row) => {
     ElMessage.warning('请输入收入来源！')
     return
   }
+  if (!row.paymentMethod) {
+    ElMessage.warning('请选择支付方式！')
+    return
+  }
+
+  // 确保 category_id 和 method_id 已设置
+  if (!row.category_id) {
+    row.category_id = categoryMapper.getIncomeCategoryId(row.ctype)
+  }
+  if (!row.method_id) {
+    row.method_id = paymentMapper.getPaymentMethodId(row.paymentMethod)
+  }
 
   // 格式化金额（保留2位小数）
   row.amount = Number(row.amount).toFixed(2)
-  // 备注默认填"无"
-  row.remark = row.remark || '无'
-  // 退出编辑状态
-  row.isEditing = false
+  // 备注默认填空字符串
+  row.remark = row.remark || ''
 
-  // ========== 核心修改：保存后重新排序 ==========
-  incomeList.value = sortDataByDate([...incomeList.value])
-  originIncomeList.value = sortDataByDate([...originIncomeList.value])
+  // 判断是新增还是修改（根据是否有 bill_id）
+  const isNew = !row.bill_id
 
-  ElMessage.success('收入记录保存成功！')
+  try {
+    if (isNew) {
+      // 新增账单
+      await addBill({
+        user_id: userStore.userId,
+        category_id: row.category_id,
+        method_id: row.method_id,
+        name: row.source,  // 收入来源作为账单名称
+        amount: Number(row.amount),
+        bill_time: BillTransformer.formatDateTime(row.date),
+        remark: row.remark || ''
+      })
+      ElMessage.success('新增收入成功！')
+    } else {
+      // 修改账单
+      await updateBill({
+        user_id: userStore.userId,
+        bill_id: row.bill_id,
+        category_id: row.category_id,
+        method_id: row.method_id,
+        name: row.source,
+        amount: Number(row.amount),
+        bill_time: BillTransformer.formatDateTime(row.date),
+        remark: row.remark || ''
+      })
+      ElMessage.success('修改收入成功！')
+    }
+
+    // 退出编辑状态
+    row.isEditing = false
+
+    // 重新加载数据
+    await initIncomeData()
+  } catch (error) {
+    console.error('保存失败:', error)
+    ElMessage.error('保存失败，请重试')
+  }
 }
 
 // 取消编辑行
@@ -695,64 +891,70 @@ const handleAddIncome = () => {
 
 // 编辑收入（改为行内编辑）
 const handleEditIncome = (row) => {
+  // 保存原始数据用于取消编辑
+  row._originalData = { ...row }
   row.isEditing = true
 }
 
-const handleDeleteIncome = (id) => {
-  // 删除收入逻辑
+const handleDeleteIncome = (billId) => {
+  // 删除收入逻辑（调用真实API）
   ElMessageBox.confirm('此操作将永久删除该收入记录, 是否继续?', '提示', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'warning',
   })
-    .then(() => {
-      incomeList.value = incomeList.value.filter((item) => item.id !== id)
-      totalIncome.value = incomeList.value.length
-      // 同步更新原始数据（删除操作后原始数据也需要更新）
-      originIncomeList.value = originIncomeList.value.filter((item) => item.id !== id)
-      ElMessage({
-        type: 'success',
-        message: '删除成功!',
-      })
+    .then(async () => {
+      try {
+        await deleteBill({
+          user_id: userStore.userId,
+          bill_id: billId
+        })
+        ElMessage.success('删除成功！')
+
+        // 重新加载数据
+        await initIncomeData()
+      } catch (error) {
+        console.error('删除失败:', error)
+        ElMessage.error('删除失败，请重试')
+      }
     })
     .catch(() => {
-      ElMessage({
-        type: 'info',
-        message: '已取消删除',
-      })
+      ElMessage.info('已取消删除')
     })
 }
 
 const handleBatchDelete = () => {
-  // 批量删除逻辑
+  // 批量删除逻辑（调用真实API）
   if (selectedIds.value.length === 0) {
     ElMessage.warning('请选择要删除的记录')
     return
   }
 
-  ElMessageBox.confirm('此操作将永久删除选中的收入记录, 是否继续?', '提示', {
+  ElMessageBox.confirm(`此操作将永久删除选中的 ${selectedIds.value.length} 条收入记录, 是否继续?`, '提示', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'warning',
   })
-    .then(() => {
-      incomeList.value = incomeList.value.filter((item) => !selectedIds.value.includes(item.id))
-      totalIncome.value = incomeList.value.length
-      // 同步更新原始数据
-      originIncomeList.value = originIncomeList.value.filter(
-        (item) => !selectedIds.value.includes(item.id),
-      )
-      selectedIds.value = []
-      ElMessage({
-        type: 'success',
-        message: '批量删除成功!',
-      })
+    .then(async () => {
+      try {
+        await batchDeleteBill({
+          user_id: userStore.userId,
+          bill_ids: selectedIds.value
+        })
+        ElMessage.success(`成功删除 ${selectedIds.value.length} 条记录！`)
+
+        // 清空选中项
+        selectedIds.value = []
+
+        // 重新加载数据
+        await initIncomeData()
+      } catch (error) {
+        console.error('批量删除失败:', error)
+        ElMessage.error('批量删除失败，请重试')
+      }
     })
     .catch(() => {
-      ElMessage({
-        type: 'info',
-        message: '已取消删除',
-      })
+      ElMessage.info('已取消删除')
     })
 }
 

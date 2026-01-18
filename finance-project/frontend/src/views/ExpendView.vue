@@ -158,21 +158,22 @@
                 </template>
               </el-table-column>
 
-              <!-- 消费种类列（可编辑） -->
-              <el-table-column prop="type" label="消费种类" width="120" align="center">
+              <!-- 消费种类列（可编辑，动态加载分类） -->
+              <el-table-column prop="type" label="消费种类" width="150" align="center">
                 <template #default="scope">
                   <el-select
                     v-if="scope.row.isEditing"
                     v-model="scope.row.type"
                     style="width: 100%"
                     placeholder="选择种类"
+                    @change="handleCategoryChange(scope.row)"
                   >
-                    <el-option label="餐饮美食" value="餐饮美食" />
-                    <el-option label="交通出行" value="交通出行" />
-                    <el-option label="居住房租" value="居住房租" />
-                    <el-option label="购物消费" value="购物消费" />
-                    <el-option label="休闲娱乐" value="休闲娱乐" />
-                    <el-option label="医疗健康" value="医疗健康" />
+                    <el-option
+                      v-for="cat in expenseCategoryList"
+                      :key="cat.category_id"
+                      :label="cat.name"
+                      :value="cat.name"
+                    />
                   </el-select>
                   <el-tag v-else :type="getTagType(scope.row.type)">{{ scope.row.type }}</el-tag>
                 </template>
@@ -206,6 +207,27 @@
                   <span v-else style="color: #f44336; font-weight: 500"
                     >-{{ Number(scope.row.money).toFixed(2) }}</span
                   >
+                </template>
+              </el-table-column>
+
+              <!-- 支付方式列（新增，可编辑） -->
+              <el-table-column prop="paymentMethod" label="支付方式" width="120" align="center">
+                <template #default="scope">
+                  <el-select
+                    v-if="scope.row.isEditing"
+                    v-model="scope.row.paymentMethod"
+                    style="width: 100%"
+                    placeholder="选择支付方式"
+                    @change="handlePaymentChange(scope.row)"
+                  >
+                    <el-option
+                      v-for="method in paymentMethodList"
+                      :key="method.method_id"
+                      :label="method.name"
+                      :value="method.name"
+                    />
+                  </el-select>
+                  <span v-else>{{ scope.row.paymentMethod || '未设置' }}</span>
                 </template>
               </el-table-column>
 
@@ -279,9 +301,25 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 // ========== 新增：导入xlsx库用于导出Excel ==========
 import * as XLSX from 'xlsx'
+// ========== 导入API和工具类 ==========
+import { getBillList, addBill, updateBill, deleteBill, batchDeleteBill, BillTransformer } from '@/api/bill'
+import { CategoryMapper } from '@/api/category'
+import { PaymentMethodMapper } from '@/api/payment'
+import { useUserStore } from '@/stores/user'
 
 // 路由跳转逻辑
 const router = useRouter()
+// ========== 获取用户信息 ==========
+const userStore = useUserStore()
+
+// ========== 初始化映射器 ==========
+const categoryMapper = new CategoryMapper()
+const paymentMapper = new PaymentMethodMapper()
+const isDataLoading = ref(false) // 数据加载状态
+
+// ========== 动态加载的分类和支付方式列表 ==========
+const expenseCategoryList = ref([]) // 支出分类列表（用于下拉框）
+const paymentMethodList = ref([]) // 支付方式列表（用于下拉框）
 const handleJumpToExpend = () => {
   router.push('/expend')
 }
@@ -358,8 +396,57 @@ const sortDataByDate = (data) => {
   })
 }
 
+// ==========  修改为从后端加载真实数据 ==========
 // 初始化支出数据
-const initExpenseData = () => {
+const initExpenseData = async () => {
+  // 如果用户未登录，使用模拟数据
+  if (!userStore.isLogin) {
+    console.warn('⚠️ 用户未登录，使用模拟数据')
+    loadMockExpenseData()
+    return
+  }
+
+  try {
+    isDataLoading.value = true
+
+    // 调用后端API获取支出列表（type=2 表示支出）
+    // 不传递 the_time 参数，获取所有数据
+    const res = await getBillList({
+      user_id: userStore.userId,
+      page: currentPage.value,
+      page_size: pageSize.value,
+      type: 2  // 2 = 支出
+    })
+
+    if (res.code === 200 && res.data) {
+      // 转换后端数据为前端格式
+      const convertedData = res.data.map(billData => {
+        const categoryName = categoryMapper.getExpenseCategoryName(billData.category_id) || '其他'
+        return BillTransformer.backendToExpense(billData, categoryName)
+      })
+
+      // 按日期降序排序
+      const sortedData = sortDataByDate(convertedData)
+
+      expenseList.value = sortedData
+      originExpenseList.value = [...sortedData]
+      totalExpense.value = res.total || sortedData.length
+
+      console.log('✅ 支出数据加载成功:', sortedData.length, '条')
+    } else {
+      throw new Error('数据格式错误')
+    }
+  } catch (error) {
+    console.error('❌ 支出数据加载失败:', error)
+    ElMessage.error('加载支出数据失败，使用模拟数据')
+    loadMockExpenseData()
+  } finally {
+    isDataLoading.value = false
+  }
+}
+
+// 加载模拟数据（兜底方案）
+const loadMockExpenseData = () => {
   // 生成50条模拟支出数据（测试分页）
   const mockData = []
   const types = ['餐饮美食', '交通出行', '居住房租', '购物消费', '休闲娱乐', '医疗健康']
@@ -375,6 +462,7 @@ const initExpenseData = () => {
     '奶茶',
     '健身房',
   ]
+  const paymentMethods = ['微信', '支付宝', '现金', '银行卡']
 
   for (let i = 1; i <= 50; i++) {
     const randomTypeIdx = Math.floor(Math.random() * types.length)
@@ -383,6 +471,7 @@ const initExpenseData = () => {
     const randomName = names[Math.floor(Math.random() * names.length)]
     const randomMoney = (Math.random() * 5000 + 10).toFixed(2)
     const randomRemark = Math.random() > 0.7 ? '无' : `${randomName}消费`
+    const randomPayment = paymentMethods[Math.floor(Math.random() * paymentMethods.length)]
 
     // 生成随机日期（近6个月）
     const date = new Date()
@@ -391,22 +480,23 @@ const initExpenseData = () => {
     const formatDate = date.toISOString().split('T')[0]
 
     mockData.push({
-      id: i, // 增加唯一ID
+      id: i,
       time: formatDate,
       iconName: randomIcon,
       type: randomType,
+      category_id: randomTypeIdx + 1,
       name: randomName,
       money: randomMoney,
+      paymentMethod: randomPayment,
+      method_id: Math.floor(Math.random() * 4) + 1,
       extra: randomRemark,
-      isEditing: false, // 新增：编辑状态标识
+      isEditing: false,
     })
   }
 
-  // ========== 核心修改：初始化时按日期降序排列 ==========
   const sortedData = sortDataByDate(mockData)
-
   expenseList.value = sortedData
-  originExpenseList.value = [...sortedData] // 保存排序后的原始数据
+  originExpenseList.value = [...sortedData]
   totalExpense.value = sortedData.length
 }
 
@@ -423,27 +513,54 @@ const handleAddRow = () => {
   const today = new Date()
   const formatDate = today.toISOString().split('T')[0]
 
-  // 新增空行数据（匹配mockData格式）
+  // 获取默认支付方式
+  const defaultPaymentMethod = paymentMethodList.value.length > 0
+    ? paymentMethodList.value[0].name
+    : ''
+  const defaultMethodId = paymentMapper.getDefaultPaymentMethodId() || 1
+
+  // 新增空行数据（匹配后端需要的字段）
   const newRow = {
     id: getNewId(),
-    time: formatDate, // 默认当前日期
-    iconName: 'Food', // 默认图标
+    time: formatDate,
+    iconName: 'Food',
     type: '',
+    category_id: null,  // 后端需要的分类ID
     name: '',
     money: '',
+    paymentMethod: defaultPaymentMethod,  // 显示用的支付方式名称
+    method_id: defaultMethodId,  // 后端需要的支付方式ID
     extra: '',
-    isEditing: true, // 新增行默认进入编辑状态
+    isEditing: true,
   }
 
   // 添加到列表头部（方便编辑）
   expenseList.value.unshift(newRow)
-  originExpenseList.value.unshift(newRow) // 同步原始数据
+  originExpenseList.value.unshift(newRow)
   totalExpense.value = expenseList.value.length
-  currentPage.value = 1 // 跳转到第一页
+  currentPage.value = 1
 }
 
-// 保存编辑行
-const handleSaveRow = (row) => {
+// ========== 处理分类改变 ==========
+const handleCategoryChange = (row) => {
+  // 当用户选择分类时，自动设置 category_id
+  if (row.type) {
+    row.category_id = categoryMapper.getExpenseCategoryId(row.type)
+    // 根据分类自动匹配图标
+    row.iconName = iconMap[row.type] || 'Food'
+  }
+}
+
+// ========== 处理支付方式改变 ==========
+const handlePaymentChange = (row) => {
+  // 当用户选择支付方式时，自动设置 method_id
+  if (row.paymentMethod) {
+    row.method_id = paymentMapper.getPaymentMethodId(row.paymentMethod)
+  }
+}
+
+// 保存编辑行（调用真实API）
+const handleSaveRow = async (row) => {
   // 基础校验
   if (!row.time) {
     ElMessage.warning('请选择日期！')
@@ -461,6 +578,18 @@ const handleSaveRow = (row) => {
     ElMessage.warning('请输入有效消费金额！')
     return
   }
+  if (!row.paymentMethod) {
+    ElMessage.warning('请选择支付方式！')
+    return
+  }
+
+  // 确保 category_id 和 method_id 已设置
+  if (!row.category_id) {
+    row.category_id = categoryMapper.getExpenseCategoryId(row.type)
+  }
+  if (!row.method_id) {
+    row.method_id = paymentMapper.getPaymentMethodId(row.paymentMethod)
+  }
 
   // 根据消费种类自动匹配图标
   row.iconName = iconMap[row.type] || 'Food'
@@ -468,14 +597,47 @@ const handleSaveRow = (row) => {
   row.money = Number(row.money).toFixed(2)
   // 备注默认填"无"
   row.extra = row.extra || '无'
-  // 退出编辑状态
-  row.isEditing = false
 
-  // ========== 核心修改：保存后重新排序 ==========
-  expenseList.value = sortDataByDate([...expenseList.value])
-  originExpenseList.value = sortDataByDate([...originExpenseList.value])
+  // 判断是新增还是修改（根据是否有 bill_id）
+  const isNew = !row.bill_id
 
-  ElMessage.success('支出记录保存成功！')
+  try {
+    if (isNew) {
+      // 新增账单
+      await addBill({
+        user_id: userStore.userId,
+        category_id: row.category_id,
+        method_id: row.method_id,
+        name: row.name,
+        amount: Number(row.money),
+        bill_time: BillTransformer.formatDateTime(row.time),
+        remark: row.extra || ''
+      })
+      ElMessage.success('新增支出成功！')
+    } else {
+      // 修改账单
+      await updateBill({
+        user_id: userStore.userId,
+        bill_id: row.bill_id,
+        category_id: row.category_id,
+        method_id: row.method_id,
+        name: row.name,
+        amount: Number(row.money),
+        bill_time: BillTransformer.formatDateTime(row.time),
+        remark: row.extra || ''
+      })
+      ElMessage.success('修改支出成功！')
+    }
+
+    // 退出编辑状态
+    row.isEditing = false
+
+    // 重新加载数据
+    await initExpenseData()
+  } catch (error) {
+    console.error('保存失败:', error)
+    ElMessage.error('保存失败，请重试')
+  }
 }
 
 // 取消编辑行
@@ -516,7 +678,7 @@ const handleCurrentChange = (val) => {
 
 // 表格多选事件
 const handleSelectionChange = (val) => {
-  selectedIds.value = val.map((item) => item.id)
+  selectedIds.value = val.map((item) => item.bill_id).filter(id => id) // 过滤掉新增未保存的行
 }
 
 // ========== 新增：支出操作方法 ==========
@@ -712,16 +874,38 @@ const handleMoneyInput = () => {
     .replace(/(\.\d{2}).*/g, '$1') // 可选：限制小数点后最多2位（金额精确到分）
 }
 
-// 页面挂载时初始化
-onMounted(() => {
+// ========== 页面挂载时初始化 ==========
+onMounted(async () => {
   const today = new Date()
   const year = today.getFullYear()
   const month = String(today.getMonth() + 1).padStart(2, '0')
   const day = String(today.getDate()).padStart(2, '0')
   searchForm.value.createTime = `${year}-${month}-${day}`
 
-  // 初始化支出数据
-  initExpenseData()
+  // 初始化分类和支付方式映射
+  console.log('🔄 开始初始化数据...')
+
+  try {
+    // 并行初始化分类和支付方式映射
+    await Promise.all([
+      categoryMapper.init(),
+      paymentMapper.init()
+    ])
+
+    console.log('✅ 分类和支付方式映射初始化成功')
+
+    // 获取分类和支付方式列表（用于下拉框）
+    expenseCategoryList.value = categoryMapper.expenseCategories
+    paymentMethodList.value = paymentMapper.getPaymentMethodList()
+
+    // 初始化支出数据（从后端加载）
+    await initExpenseData()
+
+    console.log('✅ 页面数据初始化完成')
+  } catch (error) {
+    console.error('❌ 数据初始化失败:', error)
+    ElMessage.error('数据加载失败，请刷新页面重试')
+  }
 })
 
 // ========== 核心修改：搜索逻辑（添加日期排序） ==========

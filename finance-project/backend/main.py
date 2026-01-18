@@ -228,21 +228,24 @@ def bill_batch_delete(payload: schemas.bill_batch_delete, db: Session = Depends(
 
 # 获取账单列表
 @app.get("/bill/list")
-def bill_list(user_id: int, the_time: str, page:int, page_size: int, type: int, db: Session = Depends(database.get_db)):
+def bill_list(user_id: int, page:int, page_size: int, type: int, the_time: str = None, db: Session = Depends(database.get_db)):
     if page_size <15:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="页面大小太小")
     if type not in [1, 2]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="type参数输入错误")
-    # 验证月份是否有效（1-12月）
-    try:
-        year_str, month_str = the_time.split('-')
-        year = int(year_str)
-        month = int(month_str)
+    
+    # 如果传递了 the_time，验证月份是否有效（1-12月）
+    if the_time:
+        try:
+            year_str, month_str = the_time.split('-')
+            year = int(year_str)
+            month = int(month_str)
 
-        if month < 1 or month > 12:
-            raise ValueError
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不正确的日期格式")
+            if month < 1 or month > 12:
+                raise ValueError
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不正确的日期格式")
+    
     temp = crud.get_bill_count(user_id, the_time, page_size, type, db)
     if temp == 0:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")

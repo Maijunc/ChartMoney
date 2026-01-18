@@ -394,17 +394,11 @@ def bill_batch_delete(payload: schemas.bill_batch_delete, db: Session):
 
 # 用于获取账单
 def bill_list(user_id: int, the_time: str, page: int, page_size: int, type: int, db: Session):
-    # 先将字符串形式的时间转换为datetime形式
-    start_time = datetime.strptime(f"{the_time}-01", "%Y-%m-%d")
-    if start_time.month == 12:
-        end_time = start_time.replace(year=start_time.year + 1, month=1, day=1)
-    else:
-        end_time = start_time.replace(month=start_time.month + 1, day=1)
-
     # 计算偏移量
     skip = (page - 1) * page_size
 
     try:
+        # 构建基础查询
         stmt = select(
             Bill.category_id,
             Bill.id,
@@ -420,15 +414,33 @@ def bill_list(user_id: int, the_time: str, page: int, page_size: int, type: int,
             Bill.update_time
         ).join(
             Bill_Category,
-            Bill.category_id == Bill_Category.id).join(
+            Bill.category_id == Bill_Category.id
+        ).join(
             Payment_Method,
             Payment_Method.id == Bill.method_id
-        ).where(
-            (Bill.user_id == user_id) &
-            (Bill.bill_time >= start_time) &
-            (Bill.bill_time < end_time) &
+        )
+        
+        # 添加基础条件
+        conditions = [
+            (Bill.user_id == user_id),
             (Bill_Category.type == type)
-        ).order_by(desc(Bill.bill_time)).offset(skip).limit(page_size)
+        ]
+        
+        # 如果传递了 the_time，添加时间过滤条件
+        if the_time:
+            start_time = datetime.strptime(f"{the_time}-01", "%Y-%m-%d")
+            if start_time.month == 12:
+                end_time = start_time.replace(year=start_time.year + 1, month=1, day=1)
+            else:
+                end_time = start_time.replace(month=start_time.month + 1, day=1)
+            
+            conditions.extend([
+                (Bill.bill_time >= start_time),
+                (Bill.bill_time < end_time)
+            ])
+        
+        # 应用所有条件
+        stmt = stmt.where(*conditions).order_by(desc(Bill.bill_time)).offset(skip).limit(page_size)
         the_list = db.execute(stmt)
     except Exception:
         return 0
@@ -438,7 +450,7 @@ def bill_list(user_id: int, the_time: str, page: int, page_size: int, type: int,
     for bill in the_list:
         result.append({
             "category_id": bill.category_id,
-            "bill_id": bill.id,
+            "id": bill.id,  # 注意：前端期望的是 id，不是 bill_id
             "method_id": bill.method_id,
             "category_name": bill.category_name,
             "method_name": bill.method_name,
@@ -461,21 +473,35 @@ def get_bill_count(user_id: int, the_time: str, page_size: int, type: int, db: S
     if check is None:
         return -1
 
-    # 先将字符串形式的时间转换为datetime形式
-    start_time = datetime.strptime(f"{the_time}-01", "%Y-%m-%d")
-    if start_time.month == 12:
-        end_time = start_time.replace(year=start_time.year + 1, month=1, day=1)
-    else:
-        end_time = start_time.replace(month=start_time.month + 1, day=1)
-
     # 统计符合条件的记录条数
     try:
-        stmt = select(func.count(Bill.id)).join(Bill_Category, Bill.category_id == Bill_Category.id).where(
-            (Bill.user_id == user_id) &
-            (Bill.bill_time >= start_time) &
-            (Bill.bill_time < end_time) &
-            (Bill_Category.type == type)
+        # 构建基础查询
+        stmt = select(func.count(Bill.id)).join(
+            Bill_Category,
+            Bill.category_id == Bill_Category.id
         )
+
+        # 添加基础条件
+        conditions = [
+            (Bill.user_id == user_id),
+            (Bill_Category.type == type)
+        ]
+
+        # 如果传递了 the_time，添加时间过滤条件
+        if the_time:
+            start_time = datetime.strptime(f"{the_time}-01", "%Y-%m-%d")
+            if start_time.month == 12:
+                end_time = start_time.replace(year=start_time.year + 1, month=1, day=1)
+            else:
+                end_time = start_time.replace(month=start_time.month + 1, day=1)
+
+            conditions.extend([
+                (Bill.bill_time >= start_time),
+                (Bill.bill_time < end_time)
+            ])
+
+        # 应用所有条件
+        stmt = stmt.where(*conditions)
         num = db.scalar(stmt)
     except Exception:
         return 0
