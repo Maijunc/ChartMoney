@@ -1050,19 +1050,16 @@ def get_propotion_month(user_id: int, month: int, db: Session):
         start_date = None  # 不限制开始时间
         end_date = None  # 不限制结束时间
         period_description = "全部历史"
-    elif month == 0:  # 当月
-        start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        # 计算下个月1号，然后减1秒得到本月最后时刻
+    else:
+    # 计算下个月1号，然后减1秒得到本月最后时刻
         if now.month == 12:
             next_month = now.replace(year=now.year + 1, month=1, day=1)
         else:
             next_month = now.replace(month=now.month + 1, day=1)
         end_date = next_month - timedelta(seconds=1)
-        period_description = f"{now.year}年{now.month}月"
-    else:  # 指定前N个月
-        # 计算目标月份
+    # 计算目标月份
         target_year = now.year
-        target_month = now.month - month
+        target_month = now.month - month    # 假如month是0，那么返回的就是当月的数据
 
         # 处理跨年
         while target_month < 1:
@@ -1071,15 +1068,10 @@ def get_propotion_month(user_id: int, month: int, db: Session):
 
         # 目标月份的第一天
         start_date = datetime(target_year, target_month, 1, 0, 0, 0)
-
-        # 目标月份的最后一天
-        if target_month == 12:
-            next_month = datetime(target_year + 1, 1, 1)
+        if month == 0:
+            period_description = f"{target_year}年{target_month}月内"
         else:
-            next_month = datetime(target_year, target_month + 1, 1)
-        end_date = next_month - timedelta(seconds=1)
-
-        period_description = f"{target_year}年{target_month}月"
+            period_description = f"{target_year}年{target_month}月到{now.year}年{now.month}"
 
     # 3. 构建查询
     stmt = select(
