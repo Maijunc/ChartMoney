@@ -3,7 +3,7 @@
     <!-- 顶部导航 -->
     <div class="top-nav" style="position: fixed; left: 30px">
       <div class="logo">MyFinancePal</div>
-      <div class="breadcrumb" style="">仪表盘 / 支出管理-日常支出</div>
+      <div class="breadcrumb" style="">仪表盘 / 支出管理-日常支出</div><!-- 此页删除不用了 -->
       <div class="tags-container"></div>
       <div class="user-info">
         <!-- 改为直接使用User组件（全局注册后） -->
@@ -101,7 +101,68 @@
         <!-- 菜单管理内容 -->
         <div class="menu-management-panel">
           <!-- 搜索区域 -->
-          <div class="search-bar"></div>
+          <div class="search-bar">
+            <el-form inline="false" @submit.prevent="onSearch">
+              <el-form-item label="创建时间">
+                <el-date-picker
+                  v-model="searchForm.createTime"
+                  type="date"
+                  placeholder="选择日期"
+                  style="width: 200px"
+                />
+              </el-form-item>
+              <el-form-item label="消费种类">
+                <el-select
+                  v-model="searchForm.type"
+                  placeholder="请选择消费种类"
+                  style="width: 200px"
+                  clearable
+                >
+                  <!-- 子选项列表 -->
+                  <el-option label="餐饮美食" value="餐饮美食" />
+                  <el-option label="交通出行" value="交通出行" />
+                  <el-option label="居住房租" value="居住房租" />
+                  <el-option label="购物消费" value="购物消费" />
+                  <el-option label="休闲娱乐" value="休闲娱乐" />
+                  <el-option label="医疗健康" value="医疗健康" />
+                </el-select>
+              </el-form-item>
+
+              <el-form-item label="消费名称">
+                <el-input v-model="searchForm.name" placeholder="请输入消费名称" />
+              </el-form-item>
+
+              <el-form-item label="消费金额">
+                <el-input
+                  v-model="searchForm.money"
+                  placeholder="请输入消费金额"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  @input="handleMoneyInput"
+                  style="width: 300px"
+                />
+              </el-form-item>
+
+              <el-form-item label="备&nbsp&nbsp&nbsp注" label-width="68px">
+                <el-input
+                  v-model="searchForm.extra"
+                  placeholder="无"
+                  maxlength="80"
+                  show-word-limit
+                  :word-limit-format="(used, total) => `${used}/${total} 字`"
+                  style="width: 100%"
+                />
+              </el-form-item>
+
+              <el-form-item>
+                <!-- 修复：绑定正确的搜索方法名 handleSearch -->
+                <el-button type="primary" @click="handleSearch">搜索</el-button>
+                <!-- 修复：绑定正确的重置方法名 resetSearch -->
+                <el-button @click="resetSearch">重置</el-button>
+              </el-form-item>
+            </el-form>
+          </div>
 
           <!-- ========== 改造：操作按钮栏（和收入页面一致） ========== -->
           <div class="action-bar" style="margin: 0px 0">

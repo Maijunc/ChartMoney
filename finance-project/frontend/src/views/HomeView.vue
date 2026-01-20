@@ -37,22 +37,12 @@
           </el-menu-item>
 
           <!-- 支出管理折叠菜单 -->
-          <el-sub-menu index="Goods">
+          <el-menu-item index="Goods" @click="handleJumpToRecord()">
             <template #title>
               <el-icon><Goods /></el-icon>
               <span>支出管理</span>
             </template>
-
-            <el-menu-item index="CreditCard" @click="handleJumpToRecord()">
-              <el-icon><CreditCard /></el-icon>
-              <span>总消费记录</span>
-            </el-menu-item>
-
-            <el-menu-item index="DailyExpense" @click="handleJumpToExpend()">
-              <el-icon><Wallet /></el-icon>
-              <span>日常支出</span>
-            </el-menu-item>
-          </el-sub-menu>
+          </el-menu-item>
 
           <el-menu-item index="Tickets" @click="handleJumpToBudgetView()">
             <template #title>
@@ -239,9 +229,7 @@ import useDashboardLogic from '@/stores/dashboardLogic.js'
 
 // 路由跳转逻辑
 const router = useRouter()
-const handleJumpToExpend = () => {
-  router.push('/expend')
-}
+
 const handleJumpToFirst = () => {
   router.push('/')
 }
