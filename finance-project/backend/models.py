@@ -30,7 +30,7 @@ class User(Base):   # 用户表的模型类
     password: Mapped[str] = mapped_column(type_=String(255), comment="用户密码（bcrypt加密后60字符）", nullable=False)
     phone: Mapped[str] = mapped_column(type_=String(11), comment="电话号码", nullable=False, unique=True)
     email: Mapped[str] = mapped_column(type_=String(40), comment="邮箱", nullable=True, unique=True)
-    nickname: Mapped[str] = mapped_column(type_=String(60), comment="昵称", nullable=True, default=f"用户{username}")
+    nickname: Mapped[str] = mapped_column(type_=String(60), comment="昵称", nullable=True, default="用户")
     signature: Mapped[str] = mapped_column(
         String(255),
         nullable=True,
