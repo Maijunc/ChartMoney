@@ -957,10 +957,23 @@ const handleSearch = () => {
     filteredData = filteredData.filter((item) => Math.abs(Number(item.money) - targetMoney) < 0.01)
   }
 
-  // 5. 备注筛选（模糊匹配，排除"无"的情况）
-  if (searchForm.value.extra && searchForm.value.extra !== '无') {
-    const keyword = searchForm.value.extra.trim()
-    filteredData = filteredData.filter((item) => item.extra.includes(keyword))
+  // 5. 备注筛选（模糊匹配 - 优化版）
+  if (searchForm.value.extra) {
+    const keyword = searchForm.value.extra.trim().toLowerCase()
+
+    // 如果用户搜索"无"，则查找备注为空或为"无"的记录
+    if (keyword === '无') {
+      filteredData = filteredData.filter((item) => {
+        const extraValue = item.extra || ''
+        return extraValue === '' || extraValue === '无'
+      })
+    } else {
+      // 普通模糊匹配（大小写不敏感）
+      filteredData = filteredData.filter((item) => {
+        const extraValue = (item.extra || '').toLowerCase()
+        return extraValue.includes(keyword)
+      })
+    }
   }
 
   // ========== 核心修改：搜索结果按日期降序排列 ==========

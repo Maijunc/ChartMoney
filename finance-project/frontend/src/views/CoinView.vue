@@ -102,14 +102,17 @@
           <!-- 1. 搜索与筛选栏 -->
           <div class="search-bar" style="margin-bottom: 20px">
             <el-form :inline="true" :model="searchForm" class="income-search-form">
-              <!-- 修复点1：日期字段绑定匹配 searchForm.date -->
+              <!-- 修复：日期字段添加 value-format 确保返回字符串格式 -->
               <el-form-item label="收入日期">
                 <el-date-picker
                   v-model="searchForm.date"
                   type="date"
                   placeholder="选择日期"
+                  format="YYYY-MM-DD"
+                  value-format="YYYY-MM-DD"
                   style="width: 200px"
                   :locale="zhCn"
+                  clearable
                 />
               </el-form-item>
 
@@ -126,6 +129,23 @@
                   <el-option label="兼职收入" value="兼职收入"></el-option>
                   <el-option label="奖金" value="奖金"></el-option>
                   <el-option label="其他" value="其他"></el-option>
+                </el-select>
+              </el-form-item>
+
+              <!-- 支付方式筛选（新增） -->
+              <el-form-item label="支付方式">
+                <el-select
+                  v-model="searchForm.paymentMethod"
+                  placeholder="全部方式"
+                  style="width: 200px"
+                  clearable
+                >
+                  <el-option
+                    v-for="method in paymentMethodList"
+                    :key="method.method_id"
+                    :label="method.name"
+                    :value="method.name"
+                  />
                 </el-select>
               </el-form-item>
 
@@ -504,10 +524,11 @@ const handleMenuSelect = (key) => {
   activePageKey.value = key
 }
 
-// 修复点8：搜索表单字段与模板匹配（删除冗余的min/maxAmount，新增date/source/remark）
+// 修复点8：搜索表单字段与模板匹配（删除冗余的min/maxAmount，新增date/source/remark/paymentMethod）
 const searchForm = ref({
   date: '', // 收入日期
   type: '', // 收入类型
+  paymentMethod: '', // 支付方式（新增）
   amount: '', // 收入金额
   source: '', // 收入来源
   remark: '', // 备注
@@ -827,7 +848,7 @@ const handleSearch = () => {
   // 关键修复：从原始数据拷贝，而非筛选后的数据
   let filteredData = JSON.parse(JSON.stringify(originIncomeList.value))
 
-  // 1. 日期筛选
+  // 1. 日期筛选（value-format 已确保返回 YYYY-MM-DD 字符串格式）
   if (searchForm.value.date) {
     filteredData = filteredData.filter((item) => item.date === searchForm.value.date)
   }
@@ -837,7 +858,12 @@ const handleSearch = () => {
     filteredData = filteredData.filter((item) => item.ctype === searchForm.value.type)
   }
 
-  // 3. 收入金额筛选（精确匹配）
+  // 3. 支付方式筛选（新增）
+  if (searchForm.value.paymentMethod) {
+    filteredData = filteredData.filter((item) => item.paymentMethod === searchForm.value.paymentMethod)
+  }
+
+  // 4. 收入金额筛选（精确匹配）
   if (searchForm.value.amount) {
     const targetAmount = Number(searchForm.value.amount)
     filteredData = filteredData.filter(
@@ -845,16 +871,29 @@ const handleSearch = () => {
     )
   }
 
-  // 4. 收入来源筛选（模糊匹配）
+  // 5. 收入来源筛选（模糊匹配）
   if (searchForm.value.source) {
     const keyword = searchForm.value.source.trim()
     filteredData = filteredData.filter((item) => item.source.includes(keyword))
   }
 
-  // 5. 备注筛选（模糊匹配）
-  if (searchForm.value.remark && searchForm.value.remark !== '无') {
-    const keyword = searchForm.value.remark.trim()
-    filteredData = filteredData.filter((item) => item.remark.includes(keyword))
+  // 6. 备注筛选（模糊匹配 - 优化版）
+  if (searchForm.value.remark) {
+    const keyword = searchForm.value.remark.trim().toLowerCase()
+
+    // 如果用户搜索"无"，则查找备注为空或为"无"的记录
+    if (keyword === '无') {
+      filteredData = filteredData.filter((item) => {
+        const remarkValue = item.remark || ''
+        return remarkValue === '' || remarkValue === '无'
+      })
+    } else {
+      // 普通模糊匹配（大小写不敏感）
+      filteredData = filteredData.filter((item) => {
+        const remarkValue = (item.remark || '').toLowerCase()
+        return remarkValue.includes(keyword)
+      })
+    }
   }
 
   // ========== 核心修改：搜索结果按日期降序排列 ==========
@@ -870,6 +909,7 @@ const resetSearch = async () => {
   searchForm.value = {
     date: '',
     type: '',
+    paymentMethod: '',
     amount: '',
     source: '',
     remark: '',
