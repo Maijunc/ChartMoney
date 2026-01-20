@@ -49,3 +49,30 @@ export function logout() {
   localStorage.removeItem('userInfo')
   localStorage.removeItem('userId')
 }
+
+/**
+ * 获取当前用户信息（需要 Token）
+ * @returns {Promise}
+ */
+export function getUserInfo() {
+  return request({
+    url: '/user/me',
+    method: 'get'
+  })
+}
+
+/**
+ * 更新用户信息
+ * @param {Object} data - 用户信息
+ * @param {string} data.phone - 手机号
+ * @param {string} data.avatar - 头像URL
+ * @returns {Promise}
+ */
+export function updateUserInfo(data) {
+  return request({
+    url: '/user/update',
+    method: 'put',
+    data
+  })
+}
+

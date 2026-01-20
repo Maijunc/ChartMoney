@@ -15,5 +15,11 @@ export * from './bill'
 // 预算相关
 export * from './budget'
 
+// 支付方式相关
+export * from './payment'
+
+// 用户设置相关
+export * from './user'
+
 // 导出 request 实例（用于自定义请求）
 export { default as request } from './request'

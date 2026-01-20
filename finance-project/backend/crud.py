@@ -91,6 +91,44 @@ def user_register(user: schemas.User_register, db: Session):
         return 0
 
 
+# 用于更新用户信息
+# 返回值说明：
+#   - 成功：返回更新后的用户对象 (User)
+#   - 失败：返回错误代码
+#     -1: 用户不存在
+#     -2: 手机号已被其他用户使用
+#     0: 数据库异常
+def user_update(user_id: int, user_data: schemas.User_update, db: Session):
+    # 查找用户
+    stmt = select(User).where(User.id == user_id)
+    user = db.scalar(stmt)
+
+    if user is None:
+        return -1  # 用户不存在
+
+    # 如果要更新手机号，检查手机号是否已被其他用户使用
+    if user_data.phone:
+        stmt = select(User).where(User.phone == user_data.phone, User.id != user_id)
+        existing_user = db.scalar(stmt)
+        if existing_user:
+            return -2  # 手机号已被其他用户使用
+
+    # 更新用户信息
+    try:
+        if user_data.phone:
+            user.phone = user_data.phone
+        if user_data.avatar is not None:  # 允许设置为空字符串
+            user.avatar = user_data.avatar
+
+        db.commit()
+        db.refresh(user)
+        return user
+    except Exception as e:
+        print(f"更新用户信息失败: {e}")
+        db.rollback()
+        return 0
+
+
 # # 用于创建账单分类
 # def category_add(category: schemas.category_add, db: Session):
 #     stmt = select(User).where(User.id==category.user_id)
@@ -394,17 +432,11 @@ def bill_batch_delete(payload: schemas.bill_batch_delete, db: Session):
 
 # 用于获取账单
 def bill_list(user_id: int, the_time: str, page: int, page_size: int, type: int, db: Session):
-    # 先将字符串形式的时间转换为datetime形式
-    start_time = datetime.strptime(f"{the_time}-01", "%Y-%m-%d")
-    if start_time.month == 12:
-        end_time = start_time.replace(year=start_time.year + 1, month=1, day=1)
-    else:
-        end_time = start_time.replace(month=start_time.month + 1, day=1)
-
     # 计算偏移量
     skip = (page - 1) * page_size
 
     try:
+        # 构建基础查询
         stmt = select(
             Bill.category_id,
             Bill.id,
@@ -420,15 +452,33 @@ def bill_list(user_id: int, the_time: str, page: int, page_size: int, type: int,
             Bill.update_time
         ).join(
             Bill_Category,
-            Bill.category_id == Bill_Category.id).join(
+            Bill.category_id == Bill_Category.id
+        ).join(
             Payment_Method,
             Payment_Method.id == Bill.method_id
-        ).where(
-            (Bill.user_id == user_id) &
-            (Bill.bill_time >= start_time) &
-            (Bill.bill_time < end_time) &
+        )
+        
+        # 添加基础条件
+        conditions = [
+            (Bill.user_id == user_id),
             (Bill_Category.type == type)
-        ).order_by(desc(Bill.bill_time)).offset(skip).limit(page_size)
+        ]
+        
+        # 如果传递了 the_time，添加时间过滤条件
+        if the_time:
+            start_time = datetime.strptime(f"{the_time}-01", "%Y-%m-%d")
+            if start_time.month == 12:
+                end_time = start_time.replace(year=start_time.year + 1, month=1, day=1)
+            else:
+                end_time = start_time.replace(month=start_time.month + 1, day=1)
+            
+            conditions.extend([
+                (Bill.bill_time >= start_time),
+                (Bill.bill_time < end_time)
+            ])
+        
+        # 应用所有条件
+        stmt = stmt.where(*conditions).order_by(desc(Bill.bill_time)).offset(skip).limit(page_size)
         the_list = db.execute(stmt)
     except Exception:
         return 0
@@ -438,7 +488,7 @@ def bill_list(user_id: int, the_time: str, page: int, page_size: int, type: int,
     for bill in the_list:
         result.append({
             "category_id": bill.category_id,
-            "bill_id": bill.id,
+            "id": bill.id,  # 注意：前端期望的是 id，不是 bill_id
             "method_id": bill.method_id,
             "category_name": bill.category_name,
             "method_name": bill.method_name,
@@ -461,21 +511,35 @@ def get_bill_count(user_id: int, the_time: str, page_size: int, type: int, db: S
     if check is None:
         return -1
 
-    # 先将字符串形式的时间转换为datetime形式
-    start_time = datetime.strptime(f"{the_time}-01", "%Y-%m-%d")
-    if start_time.month == 12:
-        end_time = start_time.replace(year=start_time.year + 1, month=1, day=1)
-    else:
-        end_time = start_time.replace(month=start_time.month + 1, day=1)
-
     # 统计符合条件的记录条数
     try:
-        stmt = select(func.count(Bill.id)).join(Bill_Category, Bill.category_id == Bill_Category.id).where(
-            (Bill.user_id == user_id) &
-            (Bill.bill_time >= start_time) &
-            (Bill.bill_time < end_time) &
-            (Bill_Category.type == type)
+        # 构建基础查询
+        stmt = select(func.count(Bill.id)).join(
+            Bill_Category,
+            Bill.category_id == Bill_Category.id
         )
+
+        # 添加基础条件
+        conditions = [
+            (Bill.user_id == user_id),
+            (Bill_Category.type == type)
+        ]
+
+        # 如果传递了 the_time，添加时间过滤条件
+        if the_time:
+            start_time = datetime.strptime(f"{the_time}-01", "%Y-%m-%d")
+            if start_time.month == 12:
+                end_time = start_time.replace(year=start_time.year + 1, month=1, day=1)
+            else:
+                end_time = start_time.replace(month=start_time.month + 1, day=1)
+
+            conditions.extend([
+                (Bill.bill_time >= start_time),
+                (Bill.bill_time < end_time)
+            ])
+
+        # 应用所有条件
+        stmt = stmt.where(*conditions)
         num = db.scalar(stmt)
     except Exception:
         return 0
@@ -748,6 +812,7 @@ def get_trend_days(user_id: int, days: int, db: Session):
 
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days-1)   # 回溯到n-1天前
+    start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
 
     # 1. 生成完整的日期列表
     date_range = []
@@ -810,3 +875,282 @@ def get_trend_days(user_id: int, days: int, db: Session):
         })
 
     return income_list, expense_list
+
+
+# 获取近n个月的消费数据
+def get_trend_months(user_id: int, months: int, db: Session):
+    stmt = select(User).filter(User.id == user_id)
+    try:
+        user = db.scalar(stmt)
+    except Exception:
+        return 0
+    if user is None:
+        return -1
+
+    # 2. 计算日期范围
+    end_date = datetime.now()
+
+    # 计算N个月前的第一天（确保整月）
+    # 例如：今天是2024-03-15，近3个月就是：2024-01, 2024-02, 2024-03
+    if end_date.day > 1:
+        # 从本月1号开始算
+        start_date = end_date.replace(day=1)
+        # 再往前推(months-1)个月
+        for _ in range(months - 1):
+            # 计算上个月1号
+            if start_date.month == 1:
+                start_date = start_date.replace(year=start_date.year - 1, month=12)
+            else:
+                start_date = start_date.replace(month=start_date.month - 1)
+    else:
+        # 如果今天是1号，从本月开始算
+        start_date = end_date.replace(day=1)
+        # 再往前推(months-1)个月
+        for _ in range(months - 1):
+            if start_date.month == 1:
+                start_date = start_date.replace(year=start_date.year - 1, month=12)
+            else:
+                start_date = start_date.replace(month=start_date.month - 1)
+
+    # 给日期填充时间部分，以免第一天的数据无法获取
+    start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # 生成月份列表
+    month_range = []
+    current = start_date
+    while current <= end_date:
+        month_str = current.strftime("%Y-%m")
+        month_range.append(month_str)
+
+        # 计算下个月1号
+        if current.month == 12:
+            current = current.replace(year=current.year + 1, month=1)
+        else:
+            current = current.replace(month=current.month + 1)
+
+    # 方法1：先查询所有数据，在Python中聚合
+    stmt = select(
+        Bill.bill_time,
+        Bill_Category.type.label("category_type"),
+        Bill.amount
+    ).outerjoin(
+        Bill_Category, Bill.category_id == Bill_Category.id
+    ).filter(
+        Bill.user_id == user_id,
+        Bill_Category.type.in_([1, 2]),
+        Bill.bill_time >= start_date,
+        Bill.bill_time <= end_date
+    )
+
+    try:
+        results = db.execute(stmt).all()
+    except Exception:
+        return 0
+
+    # 在Python中按月聚合
+    income_dict = defaultdict(float)
+    expense_dict = defaultdict(float)
+
+    for row in results:
+        if row.bill_time:
+            month_key = row.bill_time.strftime("%Y-%m")
+            if row.category_type == 1:  # 收入
+                income_dict[month_key] += float(row.amount or 0)
+            elif row.category_type == 2:  # 支出
+                expense_dict[month_key] += float(row.amount or 0)
+
+    # 6. 填充完整的月份列表
+    income_list = []
+    expense_list = []
+
+    for month in month_range:
+        # 解析年月
+        year_str, month_str = month.split('-')
+        year = int(year_str)
+        month_num = int(month_str)
+
+        # 收入列表
+        income_amount = income_dict.get(month, 0.0)
+        income_list.append({
+            "time": month,
+            "amount": income_amount,
+        })
+
+        # 支出列表
+        expense_amount = expense_dict.get(month, 0.0)
+        expense_list.append({
+            "time": month,
+            "amount": expense_amount,
+        })
+
+    return income_list, expense_list
+
+
+# 获取近期账单
+def get_recent_bills(user_id: int, days: int, db: Session):
+    stmt = select(User).filter(User.id == user_id)
+    try:
+        user = db.scalar(stmt)
+    except Exception:
+        return 0
+    if user is None:
+        return -1
+
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=days - 1)  # 回溯到n-1天前
+
+    start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    stmt = select(
+        Bill.bill_time,
+        Bill_Category.name.label("category_name"),
+        Bill.amount,
+        Bill_Category.type.label("type"),
+        Bill.remark
+    ).join(
+        Bill_Category, Bill.category_id == Bill_Category.id
+    ).filter(
+        Bill.user_id == user_id,
+        Bill.bill_time >= start_date,
+        Bill.bill_time <= end_date
+    ).order_by(desc(Bill.bill_time))
+
+    try:
+        bills = db.execute(stmt).all()
+    except Exception:
+        return 0
+
+    result_list = []
+    for bill in bills:
+        result_list.append({
+            "bill_time": bill.bill_time,
+            "category_name": bill.category_name,
+            "amount": bill.amount,
+            "type": bill.type,
+            "remark": bill.remark
+        })
+
+    return result_list
+
+
+# 消费列别占比（单个月，month=-1时为全部，month=0时为当月，month=1时为上个月，以此类推，最多往后推12个月）
+def get_propotion_month(user_id: int, month: int, db: Session):
+    # 1. 验证用户存在
+    try:
+        user = db.scalar(select(User).filter(User.id == user_id))
+    except Exception:
+        return 0
+    if user is None:
+        return -1
+
+    # 2. 根据month参数计算时间范围
+    now = datetime.now()
+
+    if month == -1:  # 全部历史数据
+        start_date = None  # 不限制开始时间
+        end_date = None  # 不限制结束时间
+        period_description = "全部历史"
+    else:
+    # 计算下个月1号，然后减1秒得到本月最后时刻
+        if now.month == 12:
+            next_month = now.replace(year=now.year + 1, month=1, day=1)
+        else:
+            next_month = now.replace(month=now.month + 1, day=1)
+        end_date = next_month - timedelta(seconds=1)
+    # 计算目标月份
+        target_year = now.year
+        target_month = now.month - month    # 假如month是0，那么返回的就是当月的数据
+
+        # 处理跨年
+        while target_month < 1:
+            target_month += 12
+            target_year -= 1
+
+        # 目标月份的第一天
+        start_date = datetime(target_year, target_month, 1, 0, 0, 0)
+        if month == 0:
+            period_description = f"{target_year}年{target_month}月内"
+        else:
+            period_description = f"{target_year}年{target_month}月到{now.year}年{now.month}"
+
+    # 3. 构建查询
+    stmt = select(
+        Bill_Category.name.label("category_name"),
+        Bill_Category.id.label("category_id"),
+        func.sum(Bill.amount).label("total_amount"),
+        func.count(Bill.id).label("bill_count")
+    ).join(
+        Bill_Category, Bill.category_id == Bill_Category.id
+    ).filter(
+        Bill.user_id == user_id,
+        Bill_Category.type == 2  # 只统计支出，收入不算占比
+    )
+
+    # 添加时间过滤（如果不是全部历史）
+    if month != -1 and start_date and end_date:
+        stmt = stmt.filter(
+            Bill.bill_time >= start_date,
+            Bill.bill_time <= end_date
+        )
+
+    # 按分类分组
+    stmt = stmt.group_by(
+        Bill_Category.name,
+        Bill_Category.id
+    ).order_by(
+        func.sum(Bill.amount).desc()  # 按金额降序排列
+    )
+
+    try:
+        results = db.execute(stmt).all()
+    except Exception:
+        return 0
+
+    # 4. 处理查询结果
+    category_data = []
+    total_amount = 0.0
+    total_bills = 0
+
+    for row in results:
+        amount = float(row.total_amount or 0)
+        count = row.bill_count or 0
+
+        category_data.append({
+            "category_id": row.category_id,
+            "category_name": row.category_name,
+            "amount": amount,
+            "count": count
+        })
+
+        total_amount += amount
+        total_bills += count
+
+    # 5. 计算占比
+    for item in category_data:
+        if total_amount > 0:
+            item["percentage"] = round((item["amount"] / total_amount) * 100, 2)
+            item["proportion"] = f"{item['percentage']}%"
+        else:
+            item["percentage"] = 0.0
+            item["proportion"] = "0%"
+
+    # 6. 处理没有消费数据的情况
+    if total_amount == 0:
+        # 尝试获取所有分类（即使没有消费）
+        all_categories = db.execute(
+            select(Bill_Category.id, Bill_Category.name)
+            .order_by(Bill_Category.id)
+        ).all()
+
+        for cat in all_categories:
+            category_data.append({
+                "category_id": cat.id,
+                "category_name": cat.name,
+                "amount": 0.0,
+                "count": 0,
+                "percentage": 0.0,
+                "proportion": "0%"
+            })
+
+    # 7. 返回结构化的结果
+    return period_description, category_data

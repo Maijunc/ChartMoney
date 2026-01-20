@@ -24,6 +24,12 @@ class User_register(BaseModel):
     password: str = Field(..., min_length=1, max_length=64)
 
 
+# 用于更新用户信息
+class User_update(BaseModel):
+    phone: str = Field(None, min_length=11, max_length=11, pattern=r"^1\d{10}$")
+    avatar: str = Field(None, max_length=255)
+
+
 # 用于创建账单分类
 class category_add(BaseModel):
     user_id: int = Field(..., ge=1)     # 必填且大于1
