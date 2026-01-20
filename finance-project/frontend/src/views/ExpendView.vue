@@ -658,22 +658,38 @@ const handleCancelRow = (row) => {
 const currentPage = ref(1) // 当前页码
 const pageSize = ref(15) // 每页条数（默认15条）
 const selectedIds = ref([]) // 批量选择的支出ID
+const isSearching = ref(false) // 搜索状态标志（区分正常浏览和搜索筛选）
 
-// 分页后的数据（计算属性）
+// 分页后的数据（智能分页）
 const pagedExpenseList = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  const end = start + pageSize.value
-  return expenseList.value.slice(start, end)
+  // 如果是搜索/筛选状态，使用前端分页
+  if (isSearching.value) {
+    const start = (currentPage.value - 1) * pageSize.value
+    const end = start + pageSize.value
+    return expenseList.value.slice(start, end)
+  }
+  // 正常情况下，直接显示后端返回的当前页数据
+  return expenseList.value
 })
 
-// 分页事件处理
-const handleSizeChange = (val) => {
+// 分页事件处理（调用后端API重新加载数据）
+const handleSizeChange = async (val) => {
   pageSize.value = val
   currentPage.value = 1 // 切换每页条数时重置页码
+
+  // 如果不是搜索状态，重新请求后端
+  if (!isSearching.value) {
+    await initExpenseData()
+  }
 }
 
-const handleCurrentChange = (val) => {
+const handleCurrentChange = async (val) => {
   currentPage.value = val
+
+  // 如果不是搜索状态，重新请求后端
+  if (!isSearching.value) {
+    await initExpenseData()
+  }
 }
 
 // 表格多选事件
@@ -913,6 +929,8 @@ const handleSearch = () => {
   console.log('搜索参数：', searchForm.value)
   // 重置页码
   currentPage.value = 1
+  // 设置为搜索状态
+  isSearching.value = true
 
   // 关键：从原始数据拷贝，而非筛选后的数据
   let filteredData = JSON.parse(JSON.stringify(originExpenseList.value))
@@ -954,7 +972,7 @@ const handleSearch = () => {
 }
 
 // ========== 核心修改：重置逻辑（添加日期排序） ==========
-const resetSearch = () => {
+const resetSearch = async () => {
   // 清空搜索表单
   searchForm.value = {
     type: '',
@@ -964,13 +982,12 @@ const resetSearch = () => {
     createTime: '',
   }
 
-  // ========== 核心修改：重置后的数据按日期降序排列 ==========
-  const sortedOriginData = sortDataByDate([...originExpenseList.value])
+  // 清除搜索状态
+  isSearching.value = false
+  currentPage.value = 1
 
-  // 恢复原始数据（排序后的）
-  expenseList.value = sortedOriginData
-  totalExpense.value = sortedOriginData.length
-  currentPage.value = 1 // 重置页码
+  // 重新从后端加载数据
+  await initExpenseData()
 }
 
 // 保留原有onSearch/onReset方法（兼容表单提交）

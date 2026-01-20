@@ -517,6 +517,7 @@ const searchForm = ref({
 const currentPage = ref(1) // 当前页码
 const pageSize = ref(15) // 每页条数（默认15条）
 const selectedIds = ref([]) // 批量选择的ID
+const isSearching = ref(false) // 搜索状态标志（区分正常浏览和搜索筛选）
 
 // 3. 模拟收入数据（关键修复：提前声明 originIncomeList）
 const incomeList = ref([]) // 筛选后的数据
@@ -783,21 +784,36 @@ const handleCancelRow = (row) => {
   }
 }
 
-// 4. 分页后的数据（计算属性）
+// 4. 分页后的数据（直接显示 incomeList，因为后端已返回当前页数据）
 const pagedIncomeList = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  const end = start + pageSize.value
-  return incomeList.value.slice(start, end)
+  // 如果是搜索/筛选状态，使用前端分页
+  if (isSearching.value) {
+    const start = (currentPage.value - 1) * pageSize.value
+    const end = start + pageSize.value
+    return incomeList.value.slice(start, end)
+  }
+  // 正常情况下，直接显示后端返回的当前页数据
+  return incomeList.value
 })
 
-// 5. 分页事件处理
-const handleSizeChange = (val) => {
+// 5. 分页事件处理（调用后端API重新加载数据）
+const handleSizeChange = async (val) => {
   pageSize.value = val
   currentPage.value = 1 // 切换每页条数时重置页码
+
+  // 如果是搜索状态，不重新请求后端
+  if (!isSearching.value) {
+    await initIncomeData()
+  }
 }
 
-const handleCurrentChange = (val) => {
+const handleCurrentChange = async (val) => {
   currentPage.value = val
+
+  // 如果是搜索状态，不重新请求后端
+  if (!isSearching.value) {
+    await initIncomeData()
+  }
 }
 
 // 修复点9：完善搜索逻辑（关键修复：使用 originIncomeList 作为数据源 + 排序）
@@ -805,6 +821,8 @@ const handleSearch = () => {
   console.log('搜索条件：', searchForm.value)
   // 重置页码
   currentPage.value = 1
+  // 设置为搜索状态
+  isSearching.value = true
 
   // 关键修复：从原始数据拷贝，而非筛选后的数据
   let filteredData = JSON.parse(JSON.stringify(originIncomeList.value))
@@ -848,7 +866,7 @@ const handleSearch = () => {
 }
 
 // 修复点10：重置搜索表单（关键修复：恢复原始数据 + 排序）
-const resetSearch = () => {
+const resetSearch = async () => {
   searchForm.value = {
     date: '',
     type: '',
@@ -857,13 +875,12 @@ const resetSearch = () => {
     remark: '',
   }
 
-  // ========== 核心修改：重置后的数据按日期降序排列 ==========
-  const sortedOriginData = sortDataByDate([...originIncomeList.value])
-
-  // 恢复原始数据（排序后的）
-  incomeList.value = sortedOriginData
-  totalIncome.value = sortedOriginData.length
+  // 清除搜索状态
+  isSearching.value = false
   currentPage.value = 1
+
+  // 重新从后端加载数据
+  await initIncomeData()
 }
 
 // 7. 表格选择事件
