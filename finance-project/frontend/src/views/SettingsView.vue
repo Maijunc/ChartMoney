@@ -340,6 +340,8 @@ import { ref, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import useDashboardLogic from '@/stores/dashboardLogic.js'
+import { getUserInfo, updateUserInfo, uploadAvatar, exportUserData, clearExpiredData, clearAllData } from '@/api/user'
+import { getBillList } from '@/api/bill'
 
 // 路由跳转逻辑
 const router = useRouter()
@@ -398,6 +400,9 @@ onMounted(() => {
     initTrendChart()
     initCategoryChart()
   }, 100)
+
+  // 加载用户信息
+  loadUserInfo()
 })
 
 // 顶部标签页数据（修复activePath初始值匹配）
@@ -475,28 +480,82 @@ const handleMenuSelect = (key) => {
 // 激活的设置标签页
 const activeSettingsTab = ref('profile')
 
+// 当前用户ID（从localStorage获取）
+const currentUserId = ref(null)
+
 // 个人信息表单
 const profileForm = reactive({
-  username: 'finance_user_001', // 用户名（不可修改）
-  nickname: '财智管家用户',
-  email: 'user@example.com',
-  phone: '138****8888',
-  signature: '合理规划，智慧消费',
+  username: '', // 用户名（不可修改）
+  nickname: '',
+  email: '',
+  phone: '',
+  signature: '',
   avatar: '',
 })
 
+// 加载用户信息
+const loadUserInfo = async () => {
+  try {
+    // 从localStorage获取用户ID
+    const userId = localStorage.getItem('userId')
+    if (!userId) {
+      ElMessage.warning('请先登录')
+      router.push('/login')
+      return
+    }
+    currentUserId.value = parseInt(userId)
+
+    const response = await getUserInfo()
+    if (response.code === 200 && response.data) {
+      const userData = response.data
+      profileForm.username = userData.username || ''
+      profileForm.phone = userData.phone || ''
+      profileForm.avatar = userData.avatar || ''
+      // 昵称、邮箱、签名暂时使用默认值（后端schema需要扩展）
+      profileForm.nickname = userData.nickname || userData.username
+      profileForm.email = userData.email || ''
+      profileForm.signature = userData.signature || '合理规划，智慧消费'
+    }
+  } catch (error) {
+    console.error('加载用户信息失败:', error)
+    ElMessage.error('加载用户信息失败')
+  }
+}
+
 // 保存个人信息
-const saveProfile = () => {
-  // 模拟保存接口调用
-  ElMessage.success('个人信息保存成功！')
+const saveProfile = async () => {
+  try {
+    // 验证必填字段
+    if (!profileForm.phone || profileForm.phone.length !== 11) {
+      ElMessage.warning('请输入正确的手机号')
+      return
+    }
+
+    const response = await updateUserInfo({
+      phone: profileForm.phone,
+      avatar: profileForm.avatar
+    })
+
+    if (response.code === 200) {
+      ElMessage.success('个人信息保存成功！')
+      // 更新localStorage中的用户信息
+      const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
+      userInfo.phone = profileForm.phone
+      userInfo.avatar = profileForm.avatar
+      localStorage.setItem('userInfo', JSON.stringify(userInfo))
+    } else {
+      ElMessage.error(response.message || '保存失败')
+    }
+  } catch (error) {
+    console.error('保存用户信息失败:', error)
+    ElMessage.error(error.response?.data?.detail || '保存失败，请稍后重试')
+  }
 }
 
 // 重置个人信息表单
 const resetProfileForm = () => {
-  profileForm.nickname = '财智管家用户'
-  profileForm.email = 'user@example.com'
-  profileForm.phone = '138****8888'
-  profileForm.signature = '合理规划，智慧消费'
+  loadUserInfo()
+  ElMessage.info('已重置为原始数据')
 }
 
 // 账户安全设置项
@@ -587,12 +646,35 @@ const resetPreferenceForm = () => {
 const clearingData = ref(false)
 
 // 导出数据
-const exportData = () => {
-  ElMessage.info('开始导出数据，请稍候...')
-  // 模拟导出操作
-  setTimeout(() => {
+const exportData = async () => {
+  try {
+    ElMessage.info('开始导出数据，请稍候...')
+
+    const userId = currentUserId.value
+    if (!userId) {
+      ElMessage.warning('请先登录')
+      return
+    }
+
+    // 调用导出API
+    const response = await exportUserData(userId)
+
+    // 创建下载链接
+    const blob = new Blob([JSON.stringify(response, null, 2)], { type: 'application/json' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `财务数据导出_${new Date().toISOString().split('T')[0]}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+
     ElMessage.success('数据导出成功！文件已下载')
-  }, 1500)
+  } catch (error) {
+    console.error('导出数据失败:', error)
+    ElMessage.error('数据导出失败，请稍后重试')
+  }
 }
 
 // 导入数据成功处理
@@ -605,28 +687,45 @@ const handleImportSuccess = (response) => {
 }
 
 // 清理数据
-const handleClearData = (type) => {
+const handleClearData = async (type) => {
   const message =
     type === 'expired'
       ? '确定要清理过期数据吗？此操作不可恢复！'
       : '确定要清空所有数据吗？此操作将删除您的所有财务记录，且不可恢复！'
 
-  ElMessageBox.confirm(message, '警告', {
-    confirmButtonText: '确定',
-    cancelButtonText: '取消',
-    type: 'error',
-  })
-    .then(() => {
-      clearingData.value = true
-      // 模拟清理操作
-      setTimeout(() => {
-        clearingData.value = false
-        ElMessage.success(type === 'expired' ? '过期数据清理完成！' : '所有数据已清空！')
-      }, 1000)
+  try {
+    await ElMessageBox.confirm(message, '警告', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'error',
     })
-    .catch(() => {
-      ElMessage.info('已取消数据清理操作')
-    })
+
+    clearingData.value = true
+    const userId = currentUserId.value
+
+    if (!userId) {
+      ElMessage.warning('请先登录')
+      clearingData.value = false
+      return
+    }
+
+    try {
+      if (type === 'expired') {
+        await clearExpiredData(userId, 365) // 清理一年前的数据
+        ElMessage.success('过期数据清理完成！')
+      } else {
+        await clearAllData(userId)
+        ElMessage.success('所有数据已清空！')
+      }
+    } catch (error) {
+      console.error('清理数据失败:', error)
+      ElMessage.error(error.response?.data?.detail || '清理数据失败，请稍后重试')
+    } finally {
+      clearingData.value = false
+    }
+  } catch {
+    ElMessage.info('已取消数据清理操作')
+  }
 }
 // 新增：获取上传组件的ref
 const avatarUploadRef = ref(null)
@@ -652,12 +751,36 @@ const triggerAvatarUpload = () => {
 }
 
 // 关键4：新增本地预览逻辑（选择文件后立即显示，无需等上传成功）
-const handleAvatarPreview = (uploadFile) => {
+const handleAvatarPreview = async (uploadFile) => {
   if (uploadFile.raw) {
     // 生成本地临时URL，实现即时预览
     profileForm.avatar = URL.createObjectURL(uploadFile.raw)
-    // 自动触发上传（可选，也可让用户点击“确认上传”，这里保持自动上传）
-    avatarUploadRef.value.submit()
+
+    // 自动上传到后端
+    try {
+      ElMessage.info('正在上传头像...')
+      const response = await uploadAvatar(uploadFile.raw)
+
+      if (response.code === 200 && response.data?.url) {
+        profileForm.avatar = response.data.url
+        ElMessage.success('头像上传成功！')
+
+        // 自动保存用户信息
+        await updateUserInfo({
+          phone: profileForm.phone,
+          avatar: profileForm.avatar
+        })
+
+        // 更新localStorage
+        const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
+        userInfo.avatar = profileForm.avatar
+        localStorage.setItem('userInfo', JSON.stringify(userInfo))
+      }
+    } catch (error) {
+      console.error('头像上传失败:', error)
+      ElMessage.error('头像上传失败，请稍后重试')
+      // 保留本地预览
+    }
   }
 }
 
@@ -676,7 +799,7 @@ const handleAvatarSuccess = (response, uploadFile) => {
   // 3. 保留本地预览兜底（即使后端接口未通，也能看到图片）
   else if (uploadFile.raw) {
     profileForm.avatar = URL.createObjectURL(uploadFile.raw)
-    ElMessage.success('头像预览成功（正式环境需后端返回URL）')
+    ElMessage.info('头像预览成功（需要保存后生效）')
   }
 }
 </script>

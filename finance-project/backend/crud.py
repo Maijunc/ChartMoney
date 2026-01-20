@@ -91,6 +91,44 @@ def user_register(user: schemas.User_register, db: Session):
         return 0
 
 
+# 用于更新用户信息
+# 返回值说明：
+#   - 成功：返回更新后的用户对象 (User)
+#   - 失败：返回错误代码
+#     -1: 用户不存在
+#     -2: 手机号已被其他用户使用
+#     0: 数据库异常
+def user_update(user_id: int, user_data: schemas.User_update, db: Session):
+    # 查找用户
+    stmt = select(User).where(User.id == user_id)
+    user = db.scalar(stmt)
+
+    if user is None:
+        return -1  # 用户不存在
+
+    # 如果要更新手机号，检查手机号是否已被其他用户使用
+    if user_data.phone:
+        stmt = select(User).where(User.phone == user_data.phone, User.id != user_id)
+        existing_user = db.scalar(stmt)
+        if existing_user:
+            return -2  # 手机号已被其他用户使用
+
+    # 更新用户信息
+    try:
+        if user_data.phone:
+            user.phone = user_data.phone
+        if user_data.avatar is not None:  # 允许设置为空字符串
+            user.avatar = user_data.avatar
+
+        db.commit()
+        db.refresh(user)
+        return user
+    except Exception as e:
+        print(f"更新用户信息失败: {e}")
+        db.rollback()
+        return 0
+
+
 # # 用于创建账单分类
 # def category_add(category: schemas.category_add, db: Session):
 #     stmt = select(User).where(User.id==category.user_id)

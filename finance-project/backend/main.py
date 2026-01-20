@@ -1,10 +1,15 @@
-import fastapi
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import status
 from sqlalchemy.orm import Session
+from sqlalchemy import select, delete
+from datetime import datetime, timedelta
+from fastapi import File, UploadFile
+from fastapi.staticfiles import StaticFiles
 import database, models, schemas, crud, security
 from dependencies import get_current_user, get_current_user_id
+import os
+import uuid
 
 # 启动时自动在数据库建表 (C++思维：类似编译时链接)
 models.Base.metadata.create_all(bind=database.engine)  # 创建所有以Base类为基类的模型类的元数据
@@ -19,6 +24,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 挂载静态文件目录（用于访问上传的头像）
+os.makedirs("uploads/avatars", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
 @app.get("/")
@@ -100,6 +109,86 @@ def user_register(user: schemas.User_register, db: Session = Depends(database.ge
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="该手机号已注册")
     elif result == 0:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="注册时发生异常错误")
+
+
+# 更新用户信息
+@app.put("/user/update")
+def update_user(user_data: schemas.User_update, db: Session = Depends(database.get_db), current_user: models.User = Depends(get_current_user)):
+    """
+    更新当前登录用户的信息（需要 Token）
+
+    请求头需要包含：
+    Authorization: Bearer <token>
+    """
+    result = crud.user_update(current_user.id, user_data, db)
+
+    if isinstance(result, models.User):
+        return {
+            "code": status.HTTP_200_OK,
+            "message": "更新成功",
+            "data": {
+                "user_id": result.id,
+                "username": result.username,
+                "phone": result.phone,
+                "avatar": result.avatar if result.avatar else ""
+            }
+        }
+    elif result == -1:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+    elif result == -2:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="该手机号已被其他用户使用")
+    elif result == 0:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="更新用户信息时发生异常错误")
+
+
+# 上传头像
+@app.post("/upload/avatar")
+async def upload_avatar(file: UploadFile = File(...), current_user: models.User = Depends(get_current_user)):
+    """
+    上传用户头像（需要 Token）
+
+    请求头需要包含：
+    Authorization: Bearer <token>
+    """
+    # 验证文件类型
+    allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="只支持上传图片文件（jpg, png, gif, webp）")
+
+    # 验证文件大小（限制2MB）
+    file_content = await file.read()
+    if len(file_content) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="文件大小不能超过2MB")
+
+    try:
+        # 创建上传目录
+        upload_dir = "uploads/avatars"
+        os.makedirs(upload_dir, exist_ok=True)
+
+        # 生成唯一文件名
+        file_extension = os.path.splitext(file.filename)[1]
+        unique_filename = f"{current_user.id}_{uuid.uuid4().hex}{file_extension}"
+        file_path = os.path.join(upload_dir, unique_filename)
+
+        # 保存文件
+        with open(file_path, "wb") as f:
+            f.write(file_content)
+
+        # 返回文件访问URL（包含完整的服务器地址）
+        # 在实际生产环境中，这里应该配置为真实的域名
+        avatar_url = f"http://localhost:8000/uploads/avatars/{unique_filename}"
+
+        return {
+            "code": status.HTTP_200_OK,
+            "message": "头像上传成功",
+            "data": {
+                "url": avatar_url,
+                "filename": unique_filename
+            }
+        }
+    except Exception as e:
+        print(f"上传头像失败: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="上传头像时发生错误")
 
 
 # 获取账单分类列表
@@ -457,3 +546,166 @@ def get_propotion_month(user_id: int = Query(..., ge=1),
             "time": time,
             "data": data
         }
+
+
+# 导出用户数据（包括账单、预算等）
+@app.get("/user/export")
+def export_user_data(user_id: int = Query(..., ge=1), db: Session = Depends(database.get_db)):
+    """
+    导出用户的所有财务数据
+    """
+    # 验证用户是否存在
+    result = db.execute(select(models.User).where(models.User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+
+    try:
+        # 获取所有账单
+        bills_result = db.execute(
+            select(models.Bill)
+            .where(models.Bill.user_id == user_id)
+            .order_by(models.Bill.bill_time.desc())
+        )
+        bills = bills_result.scalars().all()
+
+        # 获取所有预算
+        budgets_result = db.execute(
+            select(models.Budget)
+            .where(models.Budget.user_id == user_id)
+        )
+        budgets = budgets_result.scalars().all()
+
+        # 构建导出数据
+        export_data = {
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "phone": user.phone,
+                "avatar": user.avatar or ""
+            },
+            "bills": [
+                {
+                    "id": bill.id,
+                    "name": bill.name,
+                    "amount": float(bill.amount),
+                    "category_id": bill.category_id,
+                    "method_id": bill.method_id,
+                    "bill_time": bill.bill_time.isoformat() if bill.bill_time else None,
+                    "remark": bill.remark or ""
+                }
+                for bill in bills
+            ],
+            "budgets": [
+                {
+                    "id": budget.id,
+                    "category_id": budget.category_id,
+                    "amount": float(budget.amount),
+                    "month": budget.month,
+                    "is_total": budget.is_total
+                }
+                for budget in budgets
+            ],
+            "export_time": datetime.now().isoformat(),
+            "total_bills": len(bills),
+            "total_budgets": len(budgets)
+        }
+
+        return {
+            "code": status.HTTP_200_OK,
+            "message": "数据导出成功",
+            "data": export_data
+        }
+    except Exception as e:
+        print(f"导出数据失败: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="导出数据时发生错误")
+
+
+# 清理过期数据
+@app.delete("/user/clear-expired")
+def clear_expired_data(payload: dict, db: Session = Depends(database.get_db)):
+    """
+    清理指定天数之前的账单数据
+    """
+    user_id = payload.get("user_id")
+    days = payload.get("days", 365)
+
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="user_id 不能为空")
+
+    # 验证用户是否存在
+    result = db.execute(select(models.User).where(models.User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+
+    try:
+        # 计算截止日期
+        cutoff_date = datetime.now() - timedelta(days=days)
+
+        # 删除过期账单
+        delete_stmt = delete(models.Bill).where(
+            models.Bill.user_id == user_id,
+            models.Bill.bill_time < cutoff_date
+        )
+        result = db.execute(delete_stmt)
+        deleted_count = result.rowcount
+
+        db.commit()
+
+        return {
+            "code": status.HTTP_200_OK,
+            "message": f"已清理 {deleted_count} 条过期账单",
+            "deleted_count": deleted_count
+        }
+    except Exception as e:
+        db.rollback()
+        print(f"清理过期数据失败: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="清理数据时发生错误")
+
+
+# 清空所有数据
+@app.delete("/user/clear-all")
+def clear_all_data(payload: dict, db: Session = Depends(database.get_db)):
+    """
+    清空用户的所有账单和预算数据
+    """
+    user_id = payload.get("user_id")
+
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="user_id 不能为空")
+
+    # 验证用户是否存在
+    result = db.execute(select(models.User).where(models.User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+
+    try:
+        # 删除所有账单
+        bills_delete_stmt = delete(models.Bill).where(models.Bill.user_id == user_id)
+        bills_result = db.execute(bills_delete_stmt)
+        bills_count = bills_result.rowcount
+
+        # 删除所有预算
+        budgets_delete_stmt = delete(models.Budget).where(models.Budget.user_id == user_id)
+        budgets_result = db.execute(budgets_delete_stmt)
+        budgets_count = budgets_result.rowcount
+
+        db.commit()
+
+        return {
+            "code": status.HTTP_200_OK,
+            "message": f"已清空所有数据（{bills_count} 条账单，{budgets_count} 条预算）",
+            "deleted_bills": bills_count,
+            "deleted_budgets": budgets_count
+        }
+    except Exception as e:
+        db.rollback()
+        print(f"清空数据失败: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="清空数据时发生错误")
+
+
