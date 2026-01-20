@@ -40,7 +40,7 @@
           </el-menu-item>
 
           <!-- 支出管理折叠菜单 -->
-          <el-menu-item index="Goods" @click="handleJumpToRecord()">
+          <el-menu-item index="Goods" @click="handleJumpToExpend()">
             <template #title>
               <el-icon><Goods /></el-icon>
               <span>支出管理</span>
@@ -373,9 +373,7 @@ import { useUserStore } from '@/stores/user'
 
 // 路由跳转逻辑
 const router = useRouter()
-<<<<<<< HEAD
 
-=======
 // ==========  获取用户信息 ==========
 const userStore = useUserStore()
 
@@ -387,10 +385,10 @@ const isDataLoading = ref(false) // 数据加载状态
 // ========== 动态加载的分类和支付方式列表 ==========
 const incomeCategoryList = ref([]) // 收入分类列表（用于下拉框）
 const paymentMethodList = ref([]) // 支付方式列表（用于下拉框）
+
 const handleJumpToExpend = () => {
   router.push('/expend')
 }
->>>>>>> 50f8345643843f9b4e22c691427878dd35131f80
 const handleJumpToFirst = () => {
   router.push('/')
 }
@@ -402,9 +400,6 @@ const handleJumpToBudgetView = () => {
 }
 const handleJumpToCoin = () => {
   router.push('/coin')
-}
-const handleJumpToRecord = () => {
-  router.push('/record')
 }
 const handleJumpToSettings = () => {
   router.push('/settings')

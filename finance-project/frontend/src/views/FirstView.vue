@@ -254,9 +254,6 @@ const handleJumpToBudgetView = () => {
 const handleJumpToCoin = () => {
   router.push('/coin')
 }
-const handleJumpToRecord = () => {
-  router.push('/record')
-}
 
 // 获取dashboard逻辑变量
 const {

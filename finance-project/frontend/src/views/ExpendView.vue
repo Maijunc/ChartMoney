@@ -3,7 +3,7 @@
     <!-- 顶部导航 -->
     <div class="top-nav" style="position: fixed; left: 30px">
       <div class="logo">MyFinancePal</div>
-      <div class="breadcrumb" style="">仪表盘 / 支出管理-日常支出</div><!-- 此页删除不用了 -->
+      <div class="breadcrumb" style="">仪表盘 / 支出管理-日常支出</div>
       <div class="tags-container"></div>
       <div class="user-info">
         <!-- 改为直接使用User组件（全局注册后） -->
@@ -37,26 +37,14 @@
           </el-menu-item>
 
           <!-- 支出管理作为父级折叠菜单，包含信用卡借入记录子项 -->
-          <el-sub-menu index="Goods">
+          <el-menu-item index="Goods" style="color: rgb(64, 158, 255) !important"  @click="handleJumpToRecord()">
             <template #title>
               <el-icon><Goods /></el-icon>
               <span>支出管理</span>
             </template>
 
-            <el-menu-item index="CreditCard" @click="handleJumpToRecord()">
-              <el-icon><CreditCard /></el-icon>
-              <span>总消费记录</span>
-            </el-menu-item>
 
-            <el-menu-item
-              index="DailyExpense"
-              @click="handleJumpToExpend()"
-              style="color: rgb(64, 158, 255) !important"
-            >
-              <el-icon><Wallet /></el-icon>
-              <span>日常支出</span>
-            </el-menu-item>
-          </el-sub-menu>
+          </el-menu-item>
 
           <el-menu-item index="Tickets" @click="handleJumpToBudgetView()">
             <template #title>
@@ -101,64 +89,84 @@
         <!-- 菜单管理内容 -->
         <div class="menu-management-panel">
           <!-- 搜索区域 -->
-          <div class="search-bar">
-            <el-form inline="false" @submit.prevent="onSearch">
-              <el-form-item label="创建时间">
+          <div class="search-bar" style="margin-bottom: 20px">
+            <el-form :inline="true" :model="searchForm" class="expense-search-form">
+              <el-form-item label="支出日期">
                 <el-date-picker
-                  v-model="searchForm.createTime"
+                  v-model="searchForm.date"
                   type="date"
                   placeholder="选择日期"
+                  format="YYYY-MM-DD"
+                  value-format="YYYY-MM-DD"
                   style="width: 200px"
+                  clearable
                 />
               </el-form-item>
+
               <el-form-item label="消费种类">
                 <el-select
                   v-model="searchForm.type"
-                  placeholder="请选择消费种类"
+                  placeholder="全部类型"
                   style="width: 200px"
                   clearable
                 >
-                  <!-- 子选项列表 -->
-                  <el-option label="餐饮美食" value="餐饮美食" />
-                  <el-option label="交通出行" value="交通出行" />
-                  <el-option label="居住房租" value="居住房租" />
-                  <el-option label="购物消费" value="购物消费" />
-                  <el-option label="休闲娱乐" value="休闲娱乐" />
-                  <el-option label="医疗健康" value="医疗健康" />
+                  <el-option
+                    v-for="cat in expenseCategoryList"
+                    :key="cat.category_id || cat.id"
+                    :label="cat.name"
+                    :value="cat.name"
+                  />
                 </el-select>
               </el-form-item>
 
-              <el-form-item label="消费名称">
-                <el-input v-model="searchForm.name" placeholder="请输入消费名称" />
+              <el-form-item label="支付方式">
+                <el-select
+                  v-model="searchForm.paymentMethod"
+                  placeholder="全部方式"
+                  style="width: 200px"
+                  clearable
+                >
+                  <el-option
+                    v-for="method in paymentMethodList"
+                    :key="method.method_id || method.id"
+                    :label="method.name"
+                    :value="method.name"
+                  />
+                </el-select>
               </el-form-item>
 
               <el-form-item label="消费金额">
                 <el-input
-                  v-model="searchForm.money"
+                  v-model="searchForm.amount"
                   placeholder="请输入消费金额"
                   type="number"
                   min="0"
                   step="0.01"
-                  @input="handleMoneyInput"
-                  style="width: 300px"
+                  style="width: 200px"
+                  clearable
                 />
               </el-form-item>
 
-              <el-form-item label="备&nbsp&nbsp&nbsp注" label-width="68px">
+              <el-form-item label="消费名称">
                 <el-input
-                  v-model="searchForm.extra"
-                  placeholder="无"
-                  maxlength="80"
-                  show-word-limit
-                  :word-limit-format="(used, total) => `${used}/${total} 字`"
-                  style="width: 100%"
+                  v-model="searchForm.name"
+                  placeholder="请输入消费名称"
+                  style="width: 200px"
+                  clearable
+                />
+              </el-form-item>
+
+              <el-form-item label="备注">
+                <el-input
+                  v-model="searchForm.remark"
+                  placeholder="请输入备注"
+                  style="width: 200px"
+                  clearable
                 />
               </el-form-item>
 
               <el-form-item>
-                <!-- 修复：绑定正确的搜索方法名 handleSearch -->
                 <el-button type="primary" @click="handleSearch">搜索</el-button>
-                <!-- 修复：绑定正确的重置方法名 resetSearch -->
                 <el-button @click="resetSearch">重置</el-button>
               </el-form-item>
             </el-form>
@@ -210,15 +218,6 @@
                 </template>
               </el-table-column>
 
-              <!-- 图标列（根据类型自动匹配） -->
-              <el-table-column prop="icon" label="图标" width="80" align="center">
-                <template #default="scope">
-                  <el-icon :size="20">
-                    <component :is="scope.row.iconName" />
-                  </el-icon>
-                </template>
-              </el-table-column>
-
               <!-- 消费种类列（可编辑，动态加载分类） -->
               <el-table-column prop="type" label="消费种类" width="150" align="center">
                 <template #default="scope">
@@ -231,7 +230,7 @@
                   >
                     <el-option
                       v-for="cat in expenseCategoryList"
-                      :key="cat.category_id"
+                      :key="cat.id"
                       :label="cat.name"
                       :value="cat.name"
                     />
@@ -283,7 +282,7 @@
                   >
                     <el-option
                       v-for="method in paymentMethodList"
-                      :key="method.method_id"
+                      :key="method.method_id || method.id"
                       :label="method.name"
                       :value="method.name"
                     />
@@ -356,13 +355,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue' // 新增computed导入
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-// 引入Element Plus消息和确认框（用于操作提示）
 import { ElMessage, ElMessageBox } from 'element-plus'
-// ========== 新增：导入xlsx库用于导出Excel ==========
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import * as XLSX from 'xlsx'
-// ========== 导入API和工具类 ==========
+// 导入API和工具类
 import { getBillList, addBill, updateBill, deleteBill, batchDeleteBill, BillTransformer } from '@/api/bill'
 import { CategoryMapper } from '@/api/category'
 import { PaymentMethodMapper } from '@/api/payment'
@@ -370,17 +368,19 @@ import { useUserStore } from '@/stores/user'
 
 // 路由跳转逻辑
 const router = useRouter()
-// ========== 获取用户信息 ==========
+
+// 获取用户信息
 const userStore = useUserStore()
 
-// ========== 初始化映射器 ==========
+// 初始化映射器
 const categoryMapper = new CategoryMapper()
 const paymentMapper = new PaymentMethodMapper()
 const isDataLoading = ref(false) // 数据加载状态
 
-// ========== 动态加载的分类和支付方式列表 ==========
+// 动态加载的分类和支付方式列表
 const expenseCategoryList = ref([]) // 支出分类列表（用于下拉框）
 const paymentMethodList = ref([]) // 支付方式列表（用于下拉框）
+
 const handleJumpToExpend = () => {
   router.push('/expend')
 }
@@ -427,11 +427,12 @@ const activePageKey = ref('menu-management')
 
 // 搜索表单
 const searchForm = ref({
-  type: '',
-  name: '',
-  money: '',
-  extra: '',
-  createTime: '', // 改为字符串类型，匹配日期选择器
+  date: '', // 支出日期
+  type: '', // 消费种类
+  paymentMethod: '', // 支付方式
+  amount: '', // 消费金额
+  name: '', // 消费名称
+  remark: '', // 备注
 })
 
 // ========== 改造：支出列表数据（扩展为50条模拟数据，增加ID） ==========
@@ -457,7 +458,6 @@ const sortDataByDate = (data) => {
   })
 }
 
-// ==========  修改为从后端加载真实数据 ==========
 // 初始化支出数据
 const initExpenseData = async () => {
   // 如果用户未登录，使用模拟数据
@@ -471,7 +471,6 @@ const initExpenseData = async () => {
     isDataLoading.value = true
 
     // 调用后端API获取支出列表（type=2 表示支出）
-    // 不传递 the_time 参数，获取所有数据
     const res = await getBillList({
       user_id: userStore.userId,
       page: currentPage.value,
@@ -483,7 +482,19 @@ const initExpenseData = async () => {
       // 转换后端数据为前端格式
       const convertedData = res.data.map(billData => {
         const categoryName = categoryMapper.getExpenseCategoryName(billData.category_id) || '其他'
-        return BillTransformer.backendToExpense(billData, categoryName)
+        const paymentMethodName = paymentMapper.getPaymentMethodName(billData.method_id) || '未知'
+
+        const expenseData = BillTransformer.backendToExpense(billData, categoryName)
+
+        // 添加前端需要的额外字段
+        return {
+          ...expenseData,
+          bill_id: billData.id,  // 保存账单ID用于修改和删除
+          category_id: billData.category_id,
+          method_id: billData.method_id,
+          paymentMethod: paymentMethodName,
+          iconName: iconMap[categoryName] || 'Food'
+        }
       })
 
       // 按日期降序排序
@@ -602,21 +613,52 @@ const handleAddRow = () => {
   currentPage.value = 1
 }
 
-// ========== 处理分类改变 ==========
+// 处理分类改变
 const handleCategoryChange = (row) => {
   // 当用户选择分类时，自动设置 category_id
   if (row.type) {
-    row.category_id = categoryMapper.getExpenseCategoryId(row.type)
+    console.log('🔍 正在查找分类:', row.type)
+    console.log('📋 当前支出分类列表:', expenseCategoryList.value)
+    console.log('🗺️ 分类映射Map大小:', categoryMapper.expenseMap.size)
+    console.log('🗺️ 映射内容:', Array.from(categoryMapper.expenseMap.entries()))
+
+    // 尝试获取 category_id
+    const categoryId = categoryMapper.getExpenseCategoryId(row.type)
+
+    if (!categoryId) {
+      // 如果映射中找不到，尝试从列表中查找
+      const foundCategory = expenseCategoryList.value.find(cat => cat.name === row.type)
+      if (foundCategory) {
+        row.category_id = foundCategory.id
+        console.log('⚠️ 映射中未找到，从列表中获取:', row.type, '-> category_id:', row.category_id)
+
+        // 更新映射
+        categoryMapper.expenseMap.set(row.type, foundCategory.id)
+        categoryMapper.expenseIdMap.set(foundCategory.id, row.type)
+        console.log('✅ 已更新映射')
+      } else {
+        console.error('❌ 分类不存在:', row.type)
+        ElMessage.error(`分类"${row.type}"不存在，请刷新页面重试`)
+        row.category_id = null
+        return
+      }
+    } else {
+      row.category_id = categoryId
+    }
+
     // 根据分类自动匹配图标
     row.iconName = iconMap[row.type] || 'Food'
+
+    console.log('✅ 分类已选择:', row.type, '-> category_id:', row.category_id)
   }
 }
 
-// ========== 处理支付方式改变 ==========
+// 处理支付方式改变
 const handlePaymentChange = (row) => {
   // 当用户选择支付方式时，自动设置 method_id
   if (row.paymentMethod) {
     row.method_id = paymentMapper.getPaymentMethodId(row.paymentMethod)
+    console.log('✅ 支付方式已选择:', row.paymentMethod, '-> method_id:', row.method_id)
   }
 }
 
@@ -652,12 +694,35 @@ const handleSaveRow = async (row) => {
     row.method_id = paymentMapper.getPaymentMethodId(row.paymentMethod)
   }
 
+  // 最终校验：确保 ID 不为 null
+  if (!row.category_id) {
+    ElMessage.error('无法��取分类ID，请重新选择消费种类')
+    console.error('❌ category_id 为空:', { type: row.type, category_id: row.category_id })
+    return
+  }
+  if (!row.method_id) {
+    ElMessage.error('无法获取支付方式ID，请重新选择支付方式')
+    console.error('❌ method_id 为空:', { paymentMethod: row.paymentMethod, method_id: row.method_id })
+    return
+  }
+
+  // 调试日志：显示即将发送的数据
+  console.log('📤 准备保存账单:', {
+    user_id: userStore.userId,
+    category_id: row.category_id,
+    method_id: row.method_id,
+    name: row.name,
+    amount: Number(row.money),
+    type: row.type,
+    paymentMethod: row.paymentMethod
+  })
+
   // 根据消费种类自动匹配图标
   row.iconName = iconMap[row.type] || 'Food'
   // 格式化金额（保留2位小数）
   row.money = Number(row.money).toFixed(2)
-  // 备注默认填"无"
-  row.extra = row.extra || '无'
+  // 备注默认填空字符串
+  row.extra = row.extra || ''
 
   // 判断是新增还是修改（根据是否有 bill_id）
   const isNew = !row.bill_id
@@ -715,7 +780,7 @@ const handleCancelRow = (row) => {
   }
 }
 
-// ========== 新增：分页相关逻辑 ==========
+// 分页相关逻辑
 const currentPage = ref(1) // 当前页码
 const pageSize = ref(15) // 每页条数（默认15条）
 const selectedIds = ref([]) // 批量选择的支出ID
@@ -755,7 +820,7 @@ const handleCurrentChange = async (val) => {
 
 // 表格多选事件
 const handleSelectionChange = (val) => {
-  selectedIds.value = val.map((item) => item.bill_id).filter(id => id) // 过滤掉新增未保存的行
+  selectedIds.value = val.map((item) => item.id)
 }
 
 // ========== 新增：支出操作方法 ==========
@@ -813,87 +878,81 @@ const handleBatchDelete = () => {
     return
   }
 
-  ElMessageBox.confirm('此操作将永久删除选中的支出记录, 是否继续?', '提示', {
+  ElMessageBox.confirm(`此操作将永久删除选中的 ${selectedIds.value.length} 条支出记录, 是否继续?`, '提示', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'warning',
   })
-    .then(() => {
-      expenseList.value = expenseList.value.filter((item) => !selectedIds.value.includes(item.id))
-      originExpenseList.value = originExpenseList.value.filter(
-        (item) => !selectedIds.value.includes(item.id),
-      )
-      totalExpense.value = expenseList.value.length
-      selectedIds.value = []
-      ElMessage({
-        type: 'success',
-        message: '批量删除成功!',
-      })
+    .then(async () => {
+      try {
+        await batchDeleteBill({
+          user_id: userStore.userId,
+          bill_ids: selectedIds.value
+        })
+        ElMessage.success(`成功删除 ${selectedIds.value.length} 条记录！`)
+
+        // 清空选中项
+        selectedIds.value = []
+
+        // 重新加载数据
+        await initExpenseData()
+      } catch (error) {
+        console.error('批量删除失败:', error)
+        ElMessage.error('批量删除失败，请重试')
+      }
     })
     .catch(() => {
-      ElMessage({
-        type: 'info',
-        message: '已取消删除',
-      })
+      ElMessage.info('已取消删除')
     })
 }
 
-// ========== 核心修复：完善导出数据功能 ==========
+// 导出数据功能
 const handleExportExpense = () => {
-  // 1. 过滤掉编辑中的空行（避免导出无效数据）
-  const validData = expenseList.value.filter((item) => {
-    // 排除未保存的新增行、必填字段为空的行
-    return item.time && item.type && item.name && item.money
-  })
-
-  if (validData.length === 0) {
-    ElMessage.warning('暂无可导出的有效支出数据！')
-    return
-  }
-
-  // 2. 准备导出数据：深拷贝避免修改原数据，格式化字段
-  const exportData = JSON.parse(JSON.stringify(validData)).map((item) => {
+  // 1. 准备导出数据：深拷贝避免修改原数据
+  const exportData = JSON.parse(JSON.stringify(expenseList.value)).map((item) => {
     // 过滤掉不需要的字段
-    const { iconName, isEditing, ...rest } = item
+    const { isEditing, iconName, bill_id, category_id, method_id, ...rest } = item
     // 重命名字段（让Excel表头更友好）
     return {
       序号: rest.id,
-      消费日期: rest.time,
+      支出日期: rest.time,
       消费种类: rest.type,
       消费名称: rest.name,
       '消费金额(¥)': Number(rest.money).toFixed(2),
+      支付方式: rest.paymentMethod || '未设置',
       备注: rest.extra || '无',
     }
   })
 
-  // 3. 创建工作簿和工作表
+  // 2. 创建工作簿和工作表
   const ws = XLSX.utils.json_to_sheet(exportData)
   const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, '日常支出记录')
+  XLSX.utils.book_append_sheet(wb, ws, '支出记录')
 
-  // 4. 调整列宽（优化Excel显示）
+  // 3. 调整列宽（优化Excel显示）
   const wscols = [
     { wch: 8 }, // 序号
-    { wch: 15 }, // 消费日期
+    { wch: 15 }, // 支出日期
     { wch: 12 }, // 消费种类
     { wch: 15 }, // 消费名称
     { wch: 15 }, // 消费金额
+    { wch: 12 }, // 支付方式
     { wch: 25 }, // 备注
   ]
   ws['!cols'] = wscols
 
-  // 5. 生成文件名（带时间戳，避免重复）
+  // 4. 生成文件名（带时间戳，避免重复）
   const date = new Date()
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
-  const filename = `日常支出记录_${year}${month}${day}.xlsx`
+  const filename = `支出记录_${year}${month}${day}.xlsx`
 
-  // 6. 导出文件
+  // 5. 导出文件
   XLSX.writeFile(wb, filename)
 
-  // 7. 提示用户
-  ElMessage.success('日常支出数据导出成功！')
+  // 6. 提示用户
+  ElMessage.success('支出数据导出成功！')
 }
 
 // 顶部标签页-关闭
@@ -941,26 +1000,10 @@ const handleMenuSelect = (key) => {
   activePageKey.value = key
 }
 
-// 过滤消费金额：只保留非负的数字和一个小数点
-const handleMoneyInput = () => {
-  searchForm.value.money = searchForm.value.money
-    ?.replace(/[^0-9.]/g, '') // 移除所有非数字、非小数点的字符
-    .replace(/^\./, '') // 移除开头的小数点（避免.123这种格式）
-    .replace(/\.{2,}/g, '.') // 多个小数点只保留第一个
-    .replace(/^0+(\d)/, '$1') // 移除开头多余的0（避免00123这种格式）
-    .replace(/(\.\d{2}).*/g, '$1') // 可选：限制小数点后最多2位（金额精确到分）
-}
-
-// ========== 页面挂载时初始化 ==========
+// 页面挂载时初始化
 onMounted(async () => {
-  const today = new Date()
-  const year = today.getFullYear()
-  const month = String(today.getMonth() + 1).padStart(2, '0')
-  const day = String(today.getDate()).padStart(2, '0')
-  searchForm.value.createTime = `${year}-${month}-${day}`
-
   // 初始化分类和支付方式映射
-  console.log('🔄 开始初始化数据...')
+  console.log('🔄 开始初始化支出页面数据...')
 
   try {
     // 并行初始化分类和支付方式映射
@@ -970,35 +1013,42 @@ onMounted(async () => {
     ])
 
     console.log('✅ 分类和支付方式映射初始化成功')
+    console.log('📊 支出分类数量:', categoryMapper.expenseCategories.length)
+    console.log('📋 支出分类列表:', categoryMapper.expenseCategories)
+    console.log('🗺️ 支出映射Map大小:', categoryMapper.expenseMap.size)
+    console.log('🗺️ 支出映射内容:', Array.from(categoryMapper.expenseMap.entries()))
 
     // 获取分类和支付方式列表（用于下拉框）
     expenseCategoryList.value = categoryMapper.expenseCategories
     paymentMethodList.value = paymentMapper.getPaymentMethodList()
 
+    console.log('📝 下拉框分类列表:', expenseCategoryList.value)
+    console.log('💳 下拉框支付方式列表:', paymentMethodList.value)
+
     // 初始化支出数据（从后端加载）
     await initExpenseData()
 
-    console.log('✅ 页面数据初始化完成')
+    console.log('✅ 支出页面数据初始化完成')
   } catch (error) {
-    console.error('❌ 数据初始化失败:', error)
+    console.error('❌ 支出数据初始化失败:', error)
     ElMessage.error('数据加载失败，请刷新页面重试')
   }
 })
 
-// ========== 核心修改：搜索逻辑（添加日期排序） ==========
+// ========== 搜索逻辑 ==========
 const handleSearch = () => {
-  console.log('搜索参数：', searchForm.value)
+  console.log('搜索条件：', searchForm.value)
   // 重置页码
   currentPage.value = 1
   // 设置为搜索状态
   isSearching.value = true
 
-  // 关键：从原始数据拷贝，而非筛选后的数据
+  // 从原始数据拷贝，而非筛选后的数据
   let filteredData = JSON.parse(JSON.stringify(originExpenseList.value))
 
   // 1. 日期筛选
-  if (searchForm.value.createTime) {
-    filteredData = filteredData.filter((item) => item.time === searchForm.value.createTime)
+  if (searchForm.value.date) {
+    filteredData = filteredData.filter((item) => item.time === searchForm.value.date)
   }
 
   // 2. 消费种类筛选
@@ -1006,38 +1056,45 @@ const handleSearch = () => {
     filteredData = filteredData.filter((item) => item.type === searchForm.value.type)
   }
 
-  // 3. 消费名称筛选（模糊匹配）
+  // 3. 支付方式筛选
+  if (searchForm.value.paymentMethod) {
+    filteredData = filteredData.filter((item) => item.paymentMethod === searchForm.value.paymentMethod)
+  }
+
+  // 4. 消费金额筛选（精确匹配）
+  if (searchForm.value.amount) {
+    const targetAmount = Number(searchForm.value.amount)
+    filteredData = filteredData.filter(
+      (item) => Math.abs(Number(item.money) - targetAmount) < 0.01,
+    )
+  }
+
+  // 5. 消费名称筛选（模糊匹配）
   if (searchForm.value.name) {
     const keyword = searchForm.value.name.trim()
     filteredData = filteredData.filter((item) => item.name.includes(keyword))
   }
 
-  // 4. 消费金额筛选（精确匹配，兼容浮点数精度）
-  if (searchForm.value.money) {
-    const targetMoney = Number(searchForm.value.money)
-    filteredData = filteredData.filter((item) => Math.abs(Number(item.money) - targetMoney) < 0.01)
-  }
-
-  // 5. 备注筛选（模糊匹配 - 优化版）
-  if (searchForm.value.extra) {
-    const keyword = searchForm.value.extra.trim().toLowerCase()
+  // 6. 备注筛选（模糊匹配）
+  if (searchForm.value.remark) {
+    const keyword = searchForm.value.remark.trim().toLowerCase()
 
     // 如果用户搜索"无"，则查找备注为空或为"无"的记录
     if (keyword === '无') {
       filteredData = filteredData.filter((item) => {
-        const extraValue = item.extra || ''
-        return extraValue === '' || extraValue === '无'
+        const remarkValue = item.extra || ''
+        return remarkValue === '' || remarkValue === '无'
       })
     } else {
       // 普通模糊匹配（大小写不敏感）
       filteredData = filteredData.filter((item) => {
-        const extraValue = (item.extra || '').toLowerCase()
-        return extraValue.includes(keyword)
+        const remarkValue = (item.extra || '').toLowerCase()
+        return remarkValue.includes(keyword)
       })
     }
   }
 
-  // ========== 核心修改：搜索结果按日期降序排列 ==========
+  // 搜索结果按日期降序排列
   const sortedFilteredData = sortDataByDate(filteredData)
 
   // 更新筛选后的数据
@@ -1045,15 +1102,15 @@ const handleSearch = () => {
   totalExpense.value = sortedFilteredData.length
 }
 
-// ========== 核心修改：重置逻辑（添加日期排序） ==========
+// ========== 重置搜索 ==========
 const resetSearch = async () => {
-  // 清空搜索表单
   searchForm.value = {
+    date: '',
     type: '',
+    paymentMethod: '',
+    amount: '',
     name: '',
-    money: '',
-    extra: '',
-    createTime: '',
+    remark: '',
   }
 
   // 清除搜索状态
@@ -1070,35 +1127,25 @@ const onReset = resetSearch
 </script>
 
 <style scoped>
-@import '../styles/framework.css'; /* 导入外部CSS文件，通过@import方式并保留scoped */
+@import '../styles/framework.css';
 @import '../styles/finance-dashboard.css';
 
 /* 支出管理页面专属样式 */
-.action-bar {
+.expense-search-form {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
 .expense-table-container {
-  margin-top: 0px;
-}
-
-.expense-pagination {
-  display: flex;
-  justify-content: center; /* 水平居中 */
-  align-items: center; /* 垂直居中（可选） */
-  margin: 20px 0; /* 上下间距，优化视觉 */
-  text-align: center; /* 兜底兼容 */
-}
-
-/* 穿透样式：确保Element Plus分页组件内部也居中（如果需要） */
-:deep(.expense-pagination .el-pagination) {
-  justify-content: center;
+  margin-top: 20px;
 }
 
 /* 表格内编辑控件样式优化 */
 :deep(.el-table .el-input),
-:deep(.el-table .el-select) {
+:deep(.el-table .el-select),
+:deep(.el-table .el-date-picker) {
   width: 100%;
 }
 </style>

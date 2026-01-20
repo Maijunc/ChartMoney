@@ -35,20 +35,17 @@ def init_database():
             User(
                 username="testuser",
                 password=security.hash_password("123456"),
-                phone="13800138000",
-                avatar=""
+                phone="13800138000"
             ),
             User(
                 username="admin",
                 password=security.hash_password("admin123"),
-                phone="13800138001",
-                avatar=""
+                phone="13800138001"
             ),
             User(
                 username="demo",
                 password=security.hash_password("demo123"),
-                phone="13800138002",
-                avatar=""
+                phone="13800138002"
             )
         ]
         db.add_all(test_users)

@@ -8,6 +8,8 @@ import request from './request'
  * @param {Object} data - 账单数据
  * @param {number} data.user_id - 用户ID
  * @param {number} data.category_id - 分类ID
+ * @param {number} data.method_id - 支付方式ID
+ * @param {string} data.name - 账单名称
  * @param {number} data.amount - 金额
  * @param {string} data.bill_time - 账单时间（ISO格式）
  * @param {string} [data.remark] - 备注
@@ -20,6 +22,8 @@ export function addBill(data) {
     data: {
       user_id: data.user_id,
       category_id: data.category_id,
+      method_id: data.method_id,
+      name: data.name,
       amount: data.amount,
       bill_time: data.bill_time,
       remark: data.remark || ''
@@ -33,6 +37,8 @@ export function addBill(data) {
  * @param {number} data.user_id - 用户ID
  * @param {number} data.bill_id - 账单ID
  * @param {number} data.category_id - 分类ID
+ * @param {number} data.method_id - 支付方式ID
+ * @param {string} data.name - 账单名称
  * @param {number} data.amount - 金额
  * @param {string} data.bill_time - 账单时间（ISO格式）
  * @param {string} [data.remark] - 备注
@@ -46,6 +52,8 @@ export function updateBill(data) {
       user_id: data.user_id,
       bill_id: data.bill_id,
       category_id: data.category_id,
+      method_id: data.method_id,
+      name: data.name,
       amount: data.amount,
       bill_time: data.bill_time,
       remark: data.remark || ''

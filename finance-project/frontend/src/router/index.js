@@ -4,8 +4,7 @@ import FirstView from '../views/FirstView.vue' // 测试页面1
 
 import HomeView from '../views/HomeView.vue' //首页
 import CoinView from '../views/CoinView.vue' // 收入管理
-import ExpendView from '../views/ExpendView.vue' // 支出管理-日常支出
-import RecordView from '../views/RecordView.vue' //支出管理-总消费记录
+import ExpendView from '../views/ExpendView.vue' // 支出管理
 import BudgetView from '../views/BudgetView.vue' // 预算管理
 import AnalysisView from '../views/AnalysisView.vue' // 可视化分析
 import SettingsView from '../views/SettingsView.vue' //设置页面
@@ -47,7 +46,7 @@ const router = createRouter({
       path: '/expend',
       name: 'expend',
       component: ExpendView,
-      meta: { title: '日常支出 - 个人财政支出管理系统' },
+      meta: { title: '支出管理 - 个人财政支出管理系统' },
     },
     {
       path: '/analysis',
@@ -62,12 +61,6 @@ const router = createRouter({
       meta: { title: '预算管理 - 个人财政支出管理系统' },
     },
 
-    {
-      path: '/record', //访问路径
-      name: 'record',
-      component: RecordView,
-      meta: { title: '总消费记录 - 个人财政支出管理系统' },
-    },
     {
       path: '/settings', //访问路径
       name: 'settings',

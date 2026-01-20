@@ -41,8 +41,10 @@ export class CategoryMapper {
       if (expenseRes.code === 200 && expenseRes.data) {
         this.expenseCategories = expenseRes.data
         expenseRes.data.forEach((item) => {
-          this.expenseMap.set(item.name, item.id)
-          this.expenseIdMap.set(item.id, item.name)
+          // 后端返回的字段名是 category_id，不是 id
+          const categoryId = item.category_id || item.id
+          this.expenseMap.set(item.name, categoryId)
+          this.expenseIdMap.set(categoryId, item.name)
         })
       }
 
@@ -51,14 +53,18 @@ export class CategoryMapper {
       if (incomeRes.code === 200 && incomeRes.data) {
         this.incomeCategories = incomeRes.data
         incomeRes.data.forEach((item) => {
-          this.incomeMap.set(item.name, item.id)
-          this.incomeIdMap.set(item.id, item.name)
+          // 后端返回的字段名是 category_id，不是 id
+          const categoryId = item.category_id || item.id
+          this.incomeMap.set(item.name, categoryId)
+          this.incomeIdMap.set(categoryId, item.name)
         })
       }
 
       console.log('✅ 分类映射初始化成功')
       console.log('支出分类:', this.expenseCategories)
+      console.log('支出映射Map:', Array.from(this.expenseMap.entries()))
       console.log('收入分类:', this.incomeCategories)
+      console.log('收入映射Map:', Array.from(this.incomeMap.entries()))
     } catch (error) {
       console.error('❌ 分类映射初始化失败:', error)
     }

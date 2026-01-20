@@ -36,7 +36,7 @@
           </el-menu-item>
 
           <!-- 支出管理折叠菜单 -->
-          <el-menu-item index="Goods" @click="handleJumpToRecord()">
+          <el-menu-item index="Goods" @click="handleJumpToExpend()">
             <template #title>
               <el-icon><Goods /></el-icon>
               <span>支出管理</span>
@@ -185,8 +185,8 @@ const handleJumpToBudgetView = () => {
 const handleJumpToCoin = () => {
   router.push('/coin')
 }
-const handleJumpToRecord = () => {
-  router.push('/record')
+const handleJumpToExpend = () => {
+  router.push('/expend')
 }
 const handleJumpToSettings = () => {
   router.push('/settings')
