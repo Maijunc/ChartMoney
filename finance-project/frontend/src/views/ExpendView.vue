@@ -2,7 +2,7 @@
   <div class="mine-admin-container">
     <!-- 顶部导航 -->
     <div class="top-nav" style="position: fixed; left: 30px">
-      <div class="logo">MineAdmin</div>
+      <div class="logo">MyFinancePal</div>
       <div class="breadcrumb" style="">仪表盘 / 支出管理-日常支出</div>
       <div class="tags-container"></div>
       <div class="user-info">
