@@ -429,7 +429,7 @@ def budget_update(budget: schemas.budget_update, db: Session = Depends(database.
     elif result == -1:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该用户不存在")
     elif result == -2:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该账单不存在")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该预算不存在")
     elif result == -3:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="该预算不属于此用户")
 
