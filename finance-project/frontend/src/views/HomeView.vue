@@ -139,7 +139,7 @@
               </div>
               <div class="card-body">
                 <div class="progress-container">
-                  <div class="progress-bar" :style="{ width: (budgetUsage || 0) + '%' }"></div>
+                  <div class="progress-bar" :style="{ width: Math.min((budgetUsage || 0), 100) + '%' }"></div>
                 </div>
                 <p class="budget-info">
                   ¥{{ monthlyExpense?.toFixed(2) || '0.00' }} / ¥{{
@@ -147,8 +147,11 @@
                   }}
                   ({{ budgetUsage || 0 }}%)
                 </p>
-                <p class="budget-warning" v-if="budgetUsage > 80">
-                  <i class="icon-warning"></i> 预算即将超出
+                <p class="budget-warning warning-exceeded" v-if="budgetUsage > 100">
+                  <i class="icon-warning"></i> 预算已超出 ¥{{ (monthlyExpense - monthlyBudget).toFixed(2) }}
+                </p>
+                <p class="budget-warning warning-approaching" v-else-if="budgetUsage > 80">
+                  <i class="icon-warning"></i> 预算即将超出，仅剩 ¥{{ (monthlyBudget - monthlyExpense).toFixed(2) }}
                 </p>
               </div>
             </div>
@@ -178,7 +181,7 @@
           <section class="recent-bills">
             <div class="section-header">
               <h3>近期账单</h3>
-              <button class="btn btn-outline">查看全部</button>
+              <button class="btn btn-outline" @click="handleViewAllBills">查看全部</button>
             </div>
             <div class="bills-table">
               <table>
@@ -248,6 +251,12 @@ const handleJumpToExpend = () => {
 const handleJumpToSettings = () => {
   router.push('/settings')
 }
+
+// 查看全部账单
+const handleViewAllBills = () => {
+  router.push('/expend')
+}
+
 // 获取dashboard逻辑变量
 const {
   notificationCount,

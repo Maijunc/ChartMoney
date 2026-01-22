@@ -1,8 +1,9 @@
 // src/utils/dashboardLogic.js
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import * as echarts from 'echarts'
 import { getBillList } from '@/api/bill.js'
 import { getTrendDays, getExpenseProportionMonth } from '@/api/analysis.js'
+import { getBudgetListByMonth } from '@/api/budget.js'
 import { useUserStore } from '@/stores/user.js'
 import { ElMessage } from 'element-plus'
 
@@ -60,7 +61,7 @@ export default function useDashboardLogic() {
       const lastMonth = getLastMonth()
 
       // 获取当月账单（收入和支出）
-      const [incomeBills, expenseBills, lastMonthIncome, lastMonthExpense] = await Promise.all([
+      const [incomeBills, expenseBills, lastMonthIncome, lastMonthExpense, budgetData] = await Promise.all([
         getBillList({
           user_id: userStore.userId,
           the_time: currentMonth,
@@ -88,6 +89,11 @@ export default function useDashboardLogic() {
           page: 1,
           page_size: 100,
           type: 2
+        }),
+        // 获取当月预算数据
+        getBudgetListByMonth({
+          user_id: userStore.userId,
+          month: currentMonth
         })
       ])
 
@@ -135,9 +141,19 @@ export default function useDashboardLogic() {
         balanceRate.value = currentBalance > 0 ? 100 : 0
       }
 
-      // 计算预算使用率（假设月预算为10000，实际应从API获取）
-      monthlyBudget.value = 10000
-      budgetUsage.value = parseFloat(((currentExpense / monthlyBudget.value) * 100).toFixed(1))
+      // 计算预算使用率
+      // 从API获取的预算数据中提取月度总预算（is_total === true）
+      let totalMonthlyBudget = 0
+      if (budgetData?.data && Array.isArray(budgetData.data)) {
+        const totalBudget = budgetData.data.find((item) => item.is_total === true)
+        totalMonthlyBudget = totalBudget ? parseFloat(totalBudget.amount || 0) : 0
+      }
+
+      // 如果没有设置预算，使用默认值10000
+      monthlyBudget.value = totalMonthlyBudget > 0 ? totalMonthlyBudget : 10000
+      budgetUsage.value = monthlyBudget.value > 0
+        ? parseFloat(((currentExpense / monthlyBudget.value) * 100).toFixed(1))
+        : 0
 
       // 合并所有账单用于近期账单显示
       const allBills = [
