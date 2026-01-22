@@ -92,24 +92,44 @@
           <section class="charts-container">
             <div class="card chart-card">
               <div class="card-header">
-                <h3>消费趋势分析</h3>
-                <select class="time-selector" v-model="trendTimeRange">
-                  <option value="week">近7天</option>
-                  <option value="month">近30天</option>
-                  <option value="quarter">近3个月</option>
+                <h3>消费趋势分析（天）</h3>
+                <select class="time-selector" v-model="trendDayRange">
+                  <option value="7">近7天</option>
+                  <option value="30">近30天</option>
+                  <option value="90">近90天</option>
                 </select>
               </div>
               <div class="card-body">
-                <div id="trend-chart" class="chart"></div>
+                <div id="day-trend-chart" class="chart"></div>
+              </div>
+            </div>
+
+            <div class="card chart-card">
+              <div class="card-header">
+                <h3>消费趋势分析（月）</h3>
+                <select class="time-selector" v-model="trendMonthRange">
+                  <option value="3">近3个月</option>
+                  <option value="6">近6个月</option>
+                  <option value="9">近9个月</option>
+                  <option value="12">近12个月</option>
+                </select>
+              </div>
+              <div class="card-body">
+                <div id="month-trend-chart" class="chart"></div>
               </div>
             </div>
 
             <div class="card chart-card">
               <div class="card-header">
                 <h3>消费类别占比</h3>
-                <button class="btn btn-outline" @click="toggleExpenseType">
-                  {{ showAllExpense ? '显示主要类别' : '显示全部类别' }}
-                </button>
+                <select class="time-selector" v-model="propotionTimeRange">
+                  <option value="0">近1个月</option>
+                  <option value="2">近3个月</option>
+                  <option value="5">近6个月</option>
+                  <option value="8">近9个月</option>
+                  <option value="11">近12个月</option>
+                  <option value="-1">全部</option>
+                </select>
               </div>
               <div class="card-body">
                 <div id="category-chart" class="chart"></div>
@@ -166,7 +186,7 @@
 
 <script setup>
 // 修复导入顺序，先导入所有依赖
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import useDashboardLogic from '@/stores/dashboardLogic.js'
 
@@ -202,7 +222,9 @@ const {
   expenseGrowth,
   balanceRate,
   budgetUsage,
-  trendTimeRange,
+  trendDayRange,
+  trendMonthRange,
+  proportionTimeRange,
   showAllExpense,
   recentBills,
   handleAddBill,
@@ -210,15 +232,29 @@ const {
   handleViewReport,
   handleDataExport,
   toggleExpenseType,
-  initTrendChart,
+  initDayTrendChart,
+  initMonthTrendChart,
   initCategoryChart,
 } = useDashboardLogic()
+
+// 监听日趋势时间范围变化
+watch(trendDayRange, (newValue) => {
+  console.log('日趋势时间范围变化:', newValue)
+  initDayTrendChart()
+})
+
+// 监听月趋势时间范围变化
+watch(trendMonthRange, (newValue) => {
+  console.log('月趋势时间范围变化:', newValue)
+  initMonthTrendChart()
+})
 
 // 页面挂载初始化图表
 onMounted(() => {
   // 增加DOM存在性判断，防止图表初始化失败
   setTimeout(() => {
-    initTrendChart()
+    initDayTrendChart()
+    initMonthTrendChart()
     initCategoryChart()
   }, 100)
 })

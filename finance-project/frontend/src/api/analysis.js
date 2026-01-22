@@ -61,7 +61,7 @@ export function getRecentBills(params) {
  * 获取消费类别占比（单个月）
  * @param {Object} params
  * @param {number} params.user_id - 用户ID
- * @param {number} params.month - 月份（-1=全部，0=当月，1=上月，以此类推，最多往前推12个月）
+ * @param {number} params.month - 月份（-1=全部，0=当月数据，1=两个月数据，以此类推，最多获取一年的数据）
  * @returns {Promise}
  */
 export function getExpenseProportionMonth(params) {
