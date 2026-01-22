@@ -21,5 +21,8 @@ export * from './payment'
 // 用户设置相关
 export * from './user'
 
+// 分析统计相关
+export * from './analysis'
+
 // 导出 request 实例（用于自定义请求）
 export { default as request } from './request'
