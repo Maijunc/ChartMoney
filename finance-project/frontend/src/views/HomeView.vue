@@ -178,7 +178,7 @@
           <section class="recent-bills">
             <div class="section-header">
               <h3>近期账单</h3>
-              <button class="btn btn-outline" @click="handleJumpToExpend()">查看全部</button>
+              <button class="btn btn-outline">查看全部</button>
             </div>
             <div class="bills-table">
               <table>

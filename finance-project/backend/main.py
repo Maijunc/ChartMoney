@@ -372,11 +372,21 @@ def bill_list(user_id: int, page:int, page_size: int, type: int, the_time: str =
 def budget_add(budget: schemas.budget_add, db: Session = Depends(database.get_db)):
     result = crud.budget_add(budget, db)
 
-    if result == 1:
+    # 修复：检查是否返回了Budget对象（成功情况）
+    if isinstance(result, models.Budget):
         return {
             "code": status.HTTP_200_OK,
-            "message": "成功"
+            "message": "成功",
+            "data": {
+                "id": result.id,
+                "user_id": result.user_id,
+                "category_id": result.category_id,
+                "is_total": result.is_total,
+                "amount": float(result.amount),
+                "month": result.month
+            }
         }
+    # 以下处理错误情况（当result为整数时）
     elif result == 0:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
     elif result == -1:
@@ -419,11 +429,21 @@ def budget_delete(budget: schemas.budget_delete, db: Session = Depends(database.
 def budget_update(budget: schemas.budget_update, db: Session = Depends(database.get_db)):
     result = crud.budget_update(budget, db)
 
-    if result == 1:
+    # 修复：检查是否返回了Budget对象（成功情况）
+    if isinstance(result, models.Budget):
         return {
-            "code": 200,
-            "message": "成功"
+            "code": status.HTTP_200_OK,
+            "message": "成功",
+            "data": {
+                "id": result.id,
+                "user_id": result.user_id,
+                "category_id": result.category_id,
+                "is_total": result.is_total,
+                "amount": float(result.amount),
+                "month": result.month
+            }
         }
+    # 以下处理错误情况（当result为整数时）
     elif result == 0:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
     elif result == -1:

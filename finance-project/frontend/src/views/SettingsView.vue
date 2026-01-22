@@ -9,20 +9,35 @@
       <div class="breadcrumb">仪表盘 / 设置</div>
       <div class="tags-container"></div>
       <div class="user-info" style="display: flex; align-items: center; gap: 10px">
-        <!-- 新增的登录按钮 -->
-        <el-button
-          type="primary"
-          size="small"
-          icon="User"
-          @click="handleGoToLogin"
-          style="padding: 6px 12px; height: 32px"
-        >
-          登录/注册
-        </el-button>
+        <!-- 未登录状态：显示登录按钮 -->
+        <template v-if="!userStore.isLogin">
+          <el-button
+            type="primary"
+            size="small"
+            icon="User"
+            @click="handleGoToLogin"
+            style="padding: 6px 12px; height: 32px"
+          >
+            登录/注册
+          </el-button>
+        </template>
 
-        <el-avatar>
-          <el-icon><User /></el-icon>
-        </el-avatar>
+        <!-- 已登录状态：显示用户名、头像和退出按钮 -->
+        <template v-else>
+          <span style="font-size: 14px; color: #606266">{{ userStore.username }}</span>
+          <el-avatar :size="32" :src="userStore.avatar">
+            <el-icon><User /></el-icon>
+          </el-avatar>
+          <el-button
+            type="danger"
+            size="small"
+            icon="SwitchButton"
+            @click="handleLogout"
+            style="padding: 6px 12px; height: 32px"
+          >
+            退出登录
+          </el-button>
+        </template>
       </div>
     </div>
 
@@ -286,19 +301,11 @@
                   <el-card style="margin-top: 20px">
                     <h3 style="margin-top: 0">数据清理</h3>
                     <el-alert
-                      title="警告：以下操作将永久删除数据，请谨慎操作！"
+                      title="警告：此操作将永久删除所有数据，请谨慎操作！"
                       type="warning"
                       :closable="false"
                       style="margin-bottom: 15px"
                     />
-                    <el-button
-                      type="danger"
-                      icon="Delete"
-                      @click="handleClearData('expired')"
-                      style="margin-right: 10px"
-                    >
-                      清理过期数据
-                    </el-button>
                     <el-button
                       type="danger"
                       icon="Delete"
@@ -329,12 +336,16 @@
 import { ref, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useUserStore } from '@/stores/user.js'
 import useDashboardLogic from '@/stores/dashboardLogic.js'
-import { getUserInfo, updateUserInfo, uploadAvatar, exportUserData, clearExpiredData, clearAllData } from '@/api/user'
+import { getUserInfo, updateUserInfo, uploadAvatar, exportUserData, clearAllData } from '@/api/user'
 import { getBillList } from '@/api/bill'
 
 // 路由跳转逻辑
 const router = useRouter()
+
+// 用户状态管理
+const userStore = useUserStore()
 
 const handleJumpToFirst = () => {
   router.push('/')
@@ -357,6 +368,23 @@ const handleJumpToSettings = () => {
 
 const handleGoToLogin = () => {
   router.push('/login')
+}
+
+// 退出登录
+const handleLogout = async () => {
+  try {
+    await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+
+    userStore.logout()
+    ElMessage.success('已退出登录')
+    router.push('/login')
+  } catch {
+    // 用户取消退出
+  }
 }
 
 // 获取dashboard逻辑变量
@@ -484,25 +512,42 @@ const profileForm = reactive({
 // 加载用户信息
 const loadUserInfo = async () => {
   try {
-    // 从localStorage获取用户ID
-    const userId = localStorage.getItem('userId')
-    if (!userId) {
+    // 检查用户是否登录
+    if (!userStore.isLogin) {
       ElMessage.warning('请先登录')
       router.push('/login')
       return
     }
-    currentUserId.value = parseInt(userId)
 
-    const response = await getUserInfo()
-    if (response.code === 200 && response.data) {
-      const userData = response.data
-      profileForm.username = userData.username || ''
-      profileForm.phone = userData.phone || ''
-      profileForm.avatar = userData.avatar || ''
-      // 昵称、邮箱、签名暂时使用默认值（后端schema需要扩展）
-      profileForm.nickname = userData.nickname || userData.username
-      profileForm.email = userData.email || ''
-      profileForm.signature = userData.signature || '合理规划，智慧消费'
+    currentUserId.value = userStore.userId
+
+    // 直接从userStore读取用户数据（已在App.vue初始化时加载）
+    profileForm.username = userStore.username || ''
+    profileForm.phone = userStore.phone || ''
+    profileForm.avatar = userStore.avatar || ''
+    // 昵称、邮箱、签名暂时使用默认值（后端schema需要扩展）
+    profileForm.nickname = userStore.username || ''
+    profileForm.email = ''
+    profileForm.signature = '合理规划，智慧消费'
+
+    // 如果需要最新数据，可以调用API刷新
+    try {
+      const response = await getUserInfo()
+      if (response.code === 200 && response.data) {
+        const userData = response.data
+        profileForm.username = userData.username || profileForm.username
+        profileForm.phone = userData.phone || profileForm.phone
+        profileForm.avatar = userData.avatar || profileForm.avatar
+
+        // 同步更新userStore
+        userStore.setUserInfo({
+          username: userData.username,
+          phone: userData.phone,
+          avatar: userData.avatar
+        })
+      }
+    } catch (apiError) {
+      console.warn('API获取用户信息失败，使用缓存数据:', apiError)
     }
   } catch (error) {
     console.error('加载用户信息失败:', error)
@@ -526,11 +571,12 @@ const saveProfile = async () => {
 
     if (response.code === 200) {
       ElMessage.success('个人信息保存成功！')
-      // 更新localStorage中的用户信息
-      const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-      userInfo.phone = profileForm.phone
-      userInfo.avatar = profileForm.avatar
-      localStorage.setItem('userInfo', JSON.stringify(userInfo))
+
+      // 同步更新userStore（关键：确保整个应用中的头像一致）
+      userStore.setUserInfo({
+        phone: profileForm.phone,
+        avatar: profileForm.avatar
+      })
     } else {
       ElMessage.error(response.message || '保存失败')
     }
@@ -676,10 +722,7 @@ const handleImportSuccess = (response) => {
 
 // 清理数据
 const handleClearData = async (type) => {
-  const message =
-    type === 'expired'
-      ? '确定要清理过期数据吗？此操作不可恢复！'
-      : '确定要清空所有数据吗？此操作将删除您的所有财务记录，且不可恢复！'
+  const message = '确定要清空所有数据吗？此操作将删除您的所有财务记录，且不可恢复！'
 
   try {
     await ElMessageBox.confirm(message, '警告', {
@@ -698,13 +741,8 @@ const handleClearData = async (type) => {
     }
 
     try {
-      if (type === 'expired') {
-        await clearExpiredData(userId, 365) // 清理一年前的数据
-        ElMessage.success('过期数据清理完成！')
-      } else {
-        await clearAllData(userId)
-        ElMessage.success('所有数据已清空！')
-      }
+      await clearAllData(userId)
+      ElMessage.success('所有数据已清空！')
     } catch (error) {
       console.error('清理数据失败:', error)
       ElMessage.error(error.response?.data?.detail || '清理数据失败，请稍后重试')
@@ -753,16 +791,16 @@ const handleAvatarPreview = async (uploadFile) => {
         profileForm.avatar = response.data.url
         ElMessage.success('头像上传成功！')
 
-        // 自动保存用户信息
+        // 自动保存用户信息到后端
         await updateUserInfo({
           phone: profileForm.phone,
           avatar: profileForm.avatar
         })
 
-        // 更新localStorage
-        const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-        userInfo.avatar = profileForm.avatar
-        localStorage.setItem('userInfo', JSON.stringify(userInfo))
+        // 同步更新userStore（关键：确保顶部导航头像立即更新）
+        userStore.setUserInfo({
+          avatar: profileForm.avatar
+        })
       }
     } catch (error) {
       console.error('头像上传失败:', error)

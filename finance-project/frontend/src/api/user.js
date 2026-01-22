@@ -62,19 +62,6 @@ export function exportUserData(userId) {
   })
 }
 
-/**
- * 清理过期数据
- * @param {number} userId - 用户ID
- * @param {number} days - 保留天数
- * @returns {Promise}
- */
-export function clearExpiredData(userId, days = 365) {
-  return request({
-    url: '/user/clear-expired',
-    method: 'delete',
-    data: { user_id: userId, days }
-  })
-}
 
 /**
  * 清空所有数据

@@ -558,11 +558,11 @@ def get_bill_count(user_id: int, the_time: str, page_size: int, type: int, db: S
 
 # 用于添加预算
 def budget_add(budget: schemas.budget_add, db: Session):
-    # 值输入的有问题
-    if budget.is_total == True and budget.category_id != 0:
-        return -1
-    if budget.is_total == False and budget.category_id == 0:
-        return -1
+    # 修复：值输入验证（使用None而不是0）
+    if budget.is_total == True and budget.category_id is not None:
+        return -1  # 总预算时category_id必须为None
+    if budget.is_total == False and budget.category_id is None:
+        return -1  # 分类预算时category_id不能为None
 
     try:
         # 验证month的输入是否合法，如果合法则一定可以转换成为datetime
@@ -633,6 +633,7 @@ def budget_add(budget: schemas.budget_add, db: Session):
     # 一切校验完成，才允许创建这个预算
     try:
         if budget.is_total == False:
+            # 创建分类预算
             new_budget = Budget(
                 user_id=budget.user_id,
                 category_id=budget.category_id,
@@ -641,15 +642,19 @@ def budget_add(budget: schemas.budget_add, db: Session):
                 month=budget.month
             )
         else:
+            # 修复：创建总预算，显式设置category_id为None
             new_budget = Budget(
                 user_id=budget.user_id,
+                category_id=None,  # 总预算没有分类
                 is_total=budget.is_total,
                 amount=budget.amount,
                 month=budget.month
             )
         db.add(new_budget)
-        # db.commit()
-        return 1
+        # db.commit() 不需要手动commit，get_db会自动commit
+        db.flush()  # 刷新以获取数据库生成的ID
+        db.refresh(new_budget)  # 刷新对象以获取ID
+        return new_budget  # 返回新创建的预算对象（包含ID）
     except Exception:
         # 尝试添加时发生数据库错误
         return 0
@@ -729,7 +734,10 @@ def budget_update(budget: schemas.budget_update, db: Session):
             amount = budget.amount
         )
         db.execute(stmt)
-        return 1
+        # 修复：重新查询更新后的预算对象并返回
+        stmt = select(Budget).where(Budget.id == budget.budget_id)
+        updated_budget = db.scalar(stmt)
+        return updated_budget  # 返回更新后的预算对象
     except Exception:
         return 0
 
@@ -751,16 +759,16 @@ def budget_list_month(user_id: int, month: str, db: Session):
     except Exception:
         return -2
 
+    # 修复：不使用JOIN，直接查询Budget表
     stmt = select(
         Budget.id,
         Budget.category_id,
         Budget.is_total,
-        Bill_Category.name.label("name"),
         Budget.amount,
         Budget.month,
         Budget.create_time,
         Budget.update_time
-    ).join(Bill_Category, Bill_Category.id==Budget.category_id, isouter=True).where(
+    ).where(
         (Budget.user_id == user_id) &
         (Budget.month == month)
     )
@@ -771,28 +779,31 @@ def budget_list_month(user_id: int, month: str, db: Session):
 
     result = []
     for record in result_list:
-        if record.is_total==False:
-            result.append({
-                "id": record.id,
-                "category_id": record.category_id,
-                "is_total": record.is_total,
-                "name": record.name,
-                "amount": record.amount,
-                "month": record.month,
-                "create_time": record.create_time,
-                "update_time": record.update_time
-            })
+        item = {
+            "id": record.id,
+            "category_id": record.category_id,
+            "is_total": record.is_total,
+            "amount": record.amount,
+            "month": record.month,
+            "create_time": record.create_time,
+            "update_time": record.update_time
+        }
+        
+        # 修复：根据is_total判断name，而不是依赖JOIN
+        if record.is_total:
+            item["name"] = "本月总预算"
         else:
-            result.append({
-                "id": record.id,
-                "category_id": record.category_id,
-                "is_total": record.is_total,
-                "name": "本月总预算",
-                "amount": record.amount,
-                "month": record.month,
-                "create_time": record.create_time,
-                "update_time": record.update_time
-            })
+            # 获取分类名称
+            try:
+                stmt_cat = select(Bill_Category.name).where(
+                    Bill_Category.id == record.category_id
+                )
+                category_name = db.scalar(stmt_cat)
+                item["name"] = category_name if category_name else "未知分类"
+            except Exception:
+                item["name"] = "未知分类"
+        
+        result.append(item)
 
     return result
 
