@@ -9,35 +9,20 @@
       <div class="breadcrumb">仪表盘 / 设置</div>
       <div class="tags-container"></div>
       <div class="user-info" style="display: flex; align-items: center; gap: 10px">
-        <!-- 未登录状态：显示登录按钮 -->
-        <template v-if="!userStore.isLogin">
-          <el-button
-            type="primary"
-            size="small"
-            icon="User"
-            @click="handleGoToLogin"
-            style="padding: 6px 12px; height: 32px"
-          >
-            登录/注册
-          </el-button>
-        </template>
+        <!-- 新增的登录按钮 -->
+        <el-button
+          type="primary"
+          size="small"
+          icon="User"
+          @click="handleGoToLogin"
+          style="padding: 6px 12px; height: 32px"
+        >
+          登录/注册
+        </el-button>
 
-        <!-- 已登录状态：显示用户名、头像和退出按钮 -->
-        <template v-else>
-          <span style="font-size: 14px; color: #606266">{{ userStore.username }}</span>
-          <el-avatar :size="32" :src="userStore.avatar">
-            <el-icon><User /></el-icon>
-          </el-avatar>
-          <el-button
-            type="danger"
-            size="small"
-            icon="SwitchButton"
-            @click="handleLogout"
-            style="padding: 6px 12px; height: 32px"
-          >
-            退出登录
-          </el-button>
-        </template>
+        <el-avatar>
+          <el-icon><User /></el-icon>
+        </el-avatar>
       </div>
     </div>
 
@@ -344,16 +329,12 @@
 import { ref, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useUserStore } from '@/stores/user.js'
 import useDashboardLogic from '@/stores/dashboardLogic.js'
 import { getUserInfo, updateUserInfo, uploadAvatar, exportUserData, clearExpiredData, clearAllData } from '@/api/user'
 import { getBillList } from '@/api/bill'
 
 // 路由跳转逻辑
 const router = useRouter()
-
-// 用户状态管理
-const userStore = useUserStore()
 
 const handleJumpToFirst = () => {
   router.push('/')
@@ -376,23 +357,6 @@ const handleJumpToSettings = () => {
 
 const handleGoToLogin = () => {
   router.push('/login')
-}
-
-// 退出登录
-const handleLogout = async () => {
-  try {
-    await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning',
-    })
-
-    userStore.logout()
-    ElMessage.success('已退出登录')
-    router.push('/login')
-  } catch {
-    // 用户取消退出
-  }
 }
 
 // 获取dashboard逻辑变量
