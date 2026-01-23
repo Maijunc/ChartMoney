@@ -137,42 +137,6 @@
             </div>
           </section>
 
-          <!-- 近期账单列表（修复bill.amount的toFixed） -->
-          <section class="recent-bills">
-            <div class="section-header">
-              <h3>近期账单</h3>
-              <button class="btn btn-outline">查看全部</button>
-            </div>
-            <div class="bills-table">
-              <table>
-                <thead>
-                  <tr>
-                    <th>日期</th>
-                    <th>类别</th>
-                    <th>金额</th>
-                    <th>类型</th>
-                    <th>备注</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(bill, index) in recentBills" :key="index">
-                    <td>{{ bill.date }}</td>
-                    <td>
-                      <span :class="`category-tag ${bill.category}`">{{ bill.category }}</span>
-                    </td>
-                    <td :class="bill.type === 'income' ? 'text-green' : 'text-red'">
-                      {{ bill.type === 'income' ? '+' : '-' }}¥{{
-                        bill.amount?.toFixed(2) || '0.00'
-                      }}
-                    </td>
-                    <td>{{ bill.type === 'income' ? '收入' : '支出' }}</td>
-                    <td>{{ bill.remark || '-' }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
-
           <!-- 页脚 -->
           <footer class="dashboard-footer">
             <p>© 2026 财智管家 - 个人财务管理系统 | 数据安全加密存储</p>
@@ -255,11 +219,6 @@ watch(propotionTimeRange, (newValue) => {
   initCategoryChart()
 })
 
-// 监听显示全部支出变化
-watch(showAllExpense, (newValue) => {
-  console.log('显示全部支出变化:', newValue)
-  // TODO: 根据newValue刷新recentBills
-})
 
 // 页面挂载初始化图表
 onMounted(() => {
