@@ -565,7 +565,10 @@ export default function useDashboardLogic() {
   // 初始化类别占比图表
   const initCategoryChart = async () => {
     const chartDom = document.getElementById('category-chart')
-    if (!chartDom) return // 防止DOM不存在报错
+    if (!chartDom) {
+      console.error('找不到图表DOM元素: category-chart')
+      return
+    }
 
     if (!userStore.isLogin) {
       console.warn('用户未登录，无法加载类别占比图表')
@@ -573,83 +576,288 @@ export default function useDashboardLogic() {
     }
 
     try {
-      // 获取当月的消费类别占比
+      // 根据选择的时间范围获取对应的 month 参数
+      const monthMap = {
+        '0': 0,     // 近1个月（当月）
+        '2': 2,     // 近3个月
+        '5': 5,     // 近6个月
+        '8': 8,     // 近9个月
+        '11': 11,   // 近12个月
+        '-1': -1    // 全部历史
+      }
+
+      // 获取用户选择的月份参数
+      const monthParam = monthMap[propotionTimeRange.value] || 0
+
+      console.log('请求类别占比数据:', {
+        选择的值: propotionTimeRange.value,
+        映射的month参数: monthParam,
+        用户ID: userStore.userId
+      })
+
+      // 调用API获取数据
       const response = await getExpenseProportionMonth({
         user_id: userStore.userId,
-        month: 0 // 0=当月
+        month: monthParam  // 使用动态参数
       })
+
+      console.log('类别占比数据响应:', response)
+
+      // 清除旧图表
+      const oldChart = echarts.getInstanceByDom(chartDom)
+      if (oldChart) {
+        oldChart.dispose()
+      }
 
       const myChart = echarts.init(chartDom)
 
-      // 处理API返回的数据
+      // 处理后端返回的数据结构
+      const timeDescription = response?.time || ''
+      const categoryData = response?.data || []
+
+      console.log('原始数据:', {
+        时间段: timeDescription,
+        分类数据: categoryData,
+        数据长度: categoryData.length
+      })
+
+      // 准备图表数据 - 直接显示所有分类
       let chartData = []
-      if (response?.data && Array.isArray(response.data)) {
-        chartData = response.data.map((item) => ({
+      if (categoryData && Array.isArray(categoryData)) {
+        // 直接使用所有分类数据，不过滤
+        chartData = categoryData.map((item) => ({
           value: parseFloat(item.amount || 0),
-          name: item.category_name || '其他'
+          name: item.category_name || '未分类',
+          percentage: item.percentage || 0,
+          count: item.count || 0,
+          categoryId: item.category_id
         }))
+
+        // 按金额降序排序，让金额大的排在前面
+        chartData.sort((a, b) => b.value - a.value)
+
+        console.log('所有分类数据:', chartData)
       }
 
-      // 如果数据为空，使用默认数据
-      if (chartData.length === 0) {
+      // 如果数据为空，显示提示信息
+      if (chartData.length === 0 || chartData.every(item => item.value === 0)) {
+        console.log('没有消费数据，显示提示')
         chartData = [
-          { value: 35, name: '餐饮' },
-          { value: 20, name: '购物' },
-          { value: 15, name: '交通' },
-          { value: 30, name: '其他' },
+          {
+            value: 1,  // 使用1作为占位值，确保饼图能显示
+            name: '暂无消费数据',
+            percentage: 100,
+            count: 0,
+            categoryId: 0
+          }
         ]
       }
 
-      // 根据showAllExpense决定显示全部还是主要类别
-      const data = showAllExpense.value ? chartData : chartData.slice(0, 4)
+      // ✅ 直接使用所有数据，不需要根据showAllExpense判断
+      const displayData = chartData
+
+      // 准备ECharts数据格式
+      const seriesData = displayData.map((item, index) => {
+        // 如果只有"暂无消费数据"这一项，使用灰色
+        if (item.name === '暂无消费数据') {
+          return {
+            value: item.value,
+            name: item.name,
+            itemStyle: {
+              color: '#e0e0e0',
+              opacity: 0.7
+            }
+          }
+        }
+
+        // 正常数据使用彩色
+        return {
+          value: item.value,
+          name: item.name,
+          itemStyle: {
+            // 使用预设颜色或默认颜色
+            color: null // 让ECharts自动分配颜色
+          }
+        }
+      })
 
       const option = {
+        title: {
+          text: '消费类别占比',
+          subtext: timeDescription || '暂无数据',
+          left: 'center',
+          top: 10,
+          textStyle: {
+            fontSize: 16,
+            fontWeight: 'bold'
+          },
+          subtextStyle: {
+            fontSize: 12,
+            color: '#666'
+          }
+        },
         tooltip: {
           trigger: 'item',
-          formatter: '{a} <br/>{b}: ¥{c} ({d}%)',
+          formatter: function(params) {
+            const data = params.data
+            // 计算总金额（排除占位数据）
+            const totalAmount = chartData
+              .filter(item => item.name !== '暂无消费数据')
+              .reduce((sum, item) => sum + item.value, 0)
+
+            // 如果是"暂无消费数据"提示
+            if (data.name === '暂无消费数据') {
+              return `
+                <div style="font-weight: bold; margin-bottom: 5px; color: #999;">${data.name}</div>
+                <div>在当前时间段内没有消费记录</div>
+              `
+            }
+
+            // 正常数据的tooltip
+            const percentage = totalAmount > 0 ? ((data.value / totalAmount) * 100).toFixed(2) : '0.00'
+            return `
+              <div style="font-weight: bold; margin-bottom: 5px;">${data.name}</div>
+              <div>金额: ¥${data.value.toFixed(2)}</div>
+              <div>占比: ${percentage}%</div>
+              ${params.data.count ? `<div>交易笔数: ${params.data.count}笔</div>` : ''}
+            `
+          },
+          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          borderColor: '#ddd',
+          borderWidth: 1,
+          textStyle: {
+            color: '#333'
+          },
+          extraCssText: 'box-shadow: 0 2px 8px rgba(0,0,0,0.15);'
         },
         legend: {
+          type: 'scroll',  // 可滚动的图例
           orient: 'vertical',
           left: 'left',
           top: 'center',
+          height: '70%',
+          textStyle: {
+            fontSize: 12
+          },
+          pageTextStyle: {
+            color: '#666'
+          },
+          // 当分类很多时，限制图例显示数量
+          pageIconSize: 12,
+          pageButtonItemGap: 2,
+          pageButtonPosition: 'end'
         },
         series: [
           {
             name: '消费类别',
             type: 'pie',
-            radius: ['40%', '70%'],
-            avoidLabelOverlap: false,
+            radius: ['40%', '65%'],
+            center: ['60%', '50%'],
+            avoidLabelOverlap: true,
             itemStyle: {
-              borderRadius: 10,
+              borderRadius: 8,
               borderColor: '#fff',
               borderWidth: 2,
+              shadowColor: 'rgba(0, 0, 0, 0.1)',
+              shadowBlur: 4,
+              shadowOffsetX: 2,
+              shadowOffsetY: 2
             },
             label: {
               show: false,
               position: 'center',
+              formatter: '{b}\n{c}元 ({d}%)',
+              fontSize: 14,
+              fontWeight: 'bold'
             },
             emphasis: {
               label: {
                 show: true,
                 fontSize: 16,
-                fontWeight: 'bold',
+                fontWeight: 'bold'
               },
+              itemStyle: {
+                shadowBlur: 10,
+                shadowOffsetX: 0,
+                shadowColor: 'rgba(0, 0, 0, 0.5)'
+              }
             },
             labelLine: {
-              show: false,
+              show: true,
+              length: 10,
+              length2: 20,
+              smooth: true
             },
-            data: data,
-          },
+            data: seriesData,
+            // 添加最小角度设置，确保小数值也能显示
+            minAngle: 3
+          }
         ],
-        color: ['#FF9800', '#2196F3', '#9C27B0', '#00BCD4', '#8BC34A', '#FF5722', '#607D8B'],
+        color: [
+          '#FF6B6B', '#4ECDC4', '#FFD166', '#06D6A0',
+          '#118AB2', '#073B4C', '#EF476F', '#FFD166',
+          '#06D6A0', '#118AB2', '#7209B7', '#F72585',
+          '#3A86FF', '#FB5607', '#8338EC', '#3A86FF',
+          '#FF006E', '#FB5607', '#8338EC', '#FFBE0B'
+        ],
+        // 添加一个环形中间的文字
+        graphic: (chartData.length > 0 && chartData[0].name !== '暂无消费数据') ? [
+          {
+            type: 'text',
+            left: '70%',
+            top: '50%',
+            style: {
+              text: '总消费\n¥' + chartData.reduce((sum, item) => sum + item.value, 0).toFixed(2),
+              textAlign: 'center',
+              fill: '#333',
+              fontSize: 14,
+              fontWeight: 'bold'
+            }
+          }
+        ] : []
       }
 
       myChart.setOption(option)
+
+      // 响应式适配
       window.addEventListener('resize', () => {
         myChart.resize()
       })
+
+      // 图表点击事件
+      myChart.on('click', function(params) {
+        console.log('点击了类别:', params)
+        if (params.data.name !== '暂无消费数据') {
+          // 可以在这里添加点击事件处理，比如查看该类别的详细账单
+          console.log('点击了分类:', params.data.name, '分类ID:', params.data.categoryId)
+        }
+      })
+
     } catch (error) {
       console.error('获取类别占比数据失败:', error)
+
+      // 降级方案：显示错误信息
+      const chartDom = document.getElementById('category-chart')
+      if (chartDom) {
+        const oldChart = echarts.getInstanceByDom(chartDom)
+        if (oldChart) {
+          oldChart.dispose()
+        }
+
+        const myChart = echarts.init(chartDom)
+        myChart.setOption({
+          title: {
+            text: '数据加载失败',
+            subtext: '请检查网络连接或稍后重试',
+            left: 'center',
+            top: 'center',
+            textStyle: {
+              color: '#999',
+              fontSize: 16
+            }
+          }
+        })
+      }
     }
   }
 

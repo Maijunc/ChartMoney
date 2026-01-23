@@ -224,7 +224,7 @@ const {
   budgetUsage,
   trendDayRange,
   trendMonthRange,
-  proportionTimeRange,
+  propotionTimeRange,
   showAllExpense,
   recentBills,
   handleAddBill,
@@ -247,6 +247,18 @@ watch(trendDayRange, (newValue) => {
 watch(trendMonthRange, (newValue) => {
   console.log('月趋势时间范围变化:', newValue)
   initMonthTrendChart()
+})
+
+// 监听消费类别占比时间范围变化
+watch(propotionTimeRange, (newValue) => {
+  console.log('消费类别占比时间范围变化:', newValue)
+  initCategoryChart()
+})
+
+// 监听显示全部支出变化
+watch(showAllExpense, (newValue) => {
+  console.log('显示全部支出变化:', newValue)
+  // TODO: 根据newValue刷新recentBills
 })
 
 // 页面挂载初始化图表
