@@ -528,10 +528,9 @@ def get_trend_months(user_id: int = Query(..., ge=1),
 # 可视化界面中的“近期账单”
 @app.get("/analysis/recent_bills")
 def get_recent_bill(user_id: int = Query(..., ge=1),
-                    days: int = Query(..., ge=1),
                     db: Session = Depends(database.get_db)
                     ):
-    result = crud.get_recent_bills(user_id, days, db)
+    result = crud.get_recent_bills(user_id, db)
 
     if result == 0:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
@@ -541,7 +540,6 @@ def get_recent_bill(user_id: int = Query(..., ge=1),
         return{
             "code": status.HTTP_200_OK,
             "message": "成功",
-            "days": days,
             "data": result
         }
 

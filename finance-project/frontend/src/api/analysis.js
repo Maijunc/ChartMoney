@@ -40,10 +40,9 @@ export function getTrendMonths(params) {
 }
 
 /**
- * 获取近期账单
+ * 获取近期账单(只获取近6条账单记录)
  * @param {Object} params
  * @param {number} params.user_id - 用户ID
- * @param {number} params.days - 天数
  * @returns {Promise}
  */
 export function getRecentBills(params) {
@@ -52,7 +51,6 @@ export function getRecentBills(params) {
     method: 'get',
     params: {
       user_id: params.user_id,
-      days: params.days || 30
     }
   })
 }

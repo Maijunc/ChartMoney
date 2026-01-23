@@ -545,7 +545,7 @@ def get_bill_count(user_id: int, the_time: str, page_size: int, type: int, db: S
         return 0
 
     # 计算页面的数量
-    if num % 15 != 0:
+    if num % page_size != 0:
         page_num = (num // page_size) + 1
     else:
         page_num = num // page_size
@@ -998,7 +998,7 @@ def get_trend_months(user_id: int, months: int, db: Session):
 
 
 # 获取近期账单
-def get_recent_bills(user_id: int, days: int, db: Session):
+def get_recent_bills(user_id: int, db: Session):
     stmt = select(User).filter(User.id == user_id)
     try:
         user = db.scalar(stmt)
@@ -1006,11 +1006,6 @@ def get_recent_bills(user_id: int, days: int, db: Session):
         return 0
     if user is None:
         return -1
-
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=days - 1)  # 回溯到n-1天前
-
-    start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
 
     stmt = select(
         Bill.bill_time,
@@ -1022,9 +1017,7 @@ def get_recent_bills(user_id: int, days: int, db: Session):
         Bill_Category, Bill.category_id == Bill_Category.id
     ).filter(
         Bill.user_id == user_id,
-        Bill.bill_time >= start_date,
-        Bill.bill_time <= end_date
-    ).order_by(desc(Bill.bill_time))
+    ).order_by(desc(Bill.bill_time)).limit(6)
 
     try:
         bills = db.execute(stmt).all()
