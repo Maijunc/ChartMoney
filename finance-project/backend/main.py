@@ -367,6 +367,35 @@ def bill_list(user_id: int, page:int, page_size: int, type: int, the_time: str =
         }
 
 
+# 获取账单列表(主要用于首页页面的数据获取，将分页逻辑去除掉)
+@app.get("/bill/list_first")
+def bill_list_first(user_id: int, type: int, the_time: str = None, db: Session = Depends(database.get_db)):
+    if type not in [1, 2]:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="type参数输入错误")
+
+    if the_time:
+        try:
+            year_str, month_str = the_time.split('-')
+            year = int(year_str)
+            month = int(month_str)
+
+            if month < 1 or month > 12:
+                raise ValueError
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不正确的日期格式")
+
+    result = crud.bill_list_first(user_id, the_time, type, db)
+    if result == 0:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
+    elif result == -1:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="该用户不存在")
+    else:
+        return {
+            "code": status.HTTP_200_OK,
+            "message": "成功",
+            "data": result
+        }
+
 # 用于添加预算
 @app.post("/budget/add")
 def budget_add(budget: schemas.budget_add, db: Session = Depends(database.get_db)):

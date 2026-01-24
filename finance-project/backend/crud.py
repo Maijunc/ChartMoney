@@ -556,6 +556,81 @@ def get_bill_count(user_id: int, the_time: str, page_size: int, type: int, db: S
     }
 
 
+# 用于首页获取统计数据
+def bill_list_first(user_id: int, the_time: str, type: int, db: Session):
+    stmt = select(User.id).where(User.id == user_id)
+    check = db.scalar(stmt)
+    if check is None:
+        return -1
+
+    try:
+        # 构建基础查询
+        stmt = select(
+            Bill.category_id,
+            Bill.id,
+            Bill.method_id,
+            Bill_Category.name.label("category_name"),
+            Payment_Method.name.label("method_name"),
+            Bill_Category.type.label("type"),
+            Bill.name,
+            Bill.amount,
+            Bill.remark,
+            Bill.bill_time,
+            Bill.create_time,
+            Bill.update_time
+        ).join(
+            Bill_Category,
+            Bill.category_id == Bill_Category.id
+        ).join(
+            Payment_Method,
+            Payment_Method.id == Bill.method_id
+        )
+
+        # 添加基础条件
+        conditions = [
+            (Bill.user_id == user_id),
+            (Bill_Category.type == type)
+        ]
+
+        # 如果传递了 the_time，添加时间过滤条件
+        if the_time:
+            start_time = datetime.strptime(f"{the_time}-01", "%Y-%m-%d")
+            if start_time.month == 12:
+                end_time = start_time.replace(year=start_time.year + 1, month=1, day=1)
+            else:
+                end_time = start_time.replace(month=start_time.month + 1, day=1)
+
+            conditions.extend([
+                (Bill.bill_time >= start_time),
+                (Bill.bill_time < end_time)
+            ])
+
+        # 应用所有条件
+        stmt = stmt.where(*conditions).order_by(desc(Bill.bill_time))
+        the_list = db.execute(stmt)
+    except Exception:
+        return 0
+
+    # 将查询结果转换为列表
+    result = []
+    for bill in the_list:
+        result.append({
+            "category_id": bill.category_id,
+            "id": bill.id,  # 注意：前端期望的是 id，不是 bill_id
+            "method_id": bill.method_id,
+            "category_name": bill.category_name,
+            "method_name": bill.method_name,
+            "name": bill.name,
+            "amount": bill.amount,
+            "remark": bill.remark,
+            "type": bill.type,
+            "bill_time": bill.bill_time,
+            "create_time": bill.create_time,
+            "update_time": bill.update_time
+        })
+
+    return result
+
 # 用于添加预算
 def budget_add(budget: schemas.budget_add, db: Session):
     # 修复：值输入验证（使用None而不是0）

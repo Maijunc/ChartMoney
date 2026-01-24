@@ -1,7 +1,7 @@
 // src/utils/dashboardLogic.js
 import { ref } from 'vue'
 import * as echarts from 'echarts'
-import { getBillList } from '@/api/bill.js'
+import { getBillListFirst } from '@/api/bill.js'
 import { getTrendDays, getTrendMonths, getExpenseProportionMonth } from '@/api/analysis.js'
 import { getBudgetListByMonth } from '@/api/budget.js'
 import { useUserStore } from '@/stores/user.js'
@@ -64,28 +64,28 @@ export default function useDashboardLogic() {
 
       // 获取当月账单（收入和支出）
       const [incomeBills, expenseBills, lastMonthIncome, lastMonthExpense, budgetData] = await Promise.all([
-        getBillList({
+        getBillListFirst({
           user_id: userStore.userId,
           the_time: currentMonth,
           page: 1,
           page_size: 100,
           type: 1 // 1=收入
         }),
-        getBillList({
+        getBillListFirst({
           user_id: userStore.userId,
           the_time: currentMonth,
           page: 1,
           page_size: 100,
           type: 2 // 2=支出
         }),
-        getBillList({
+        getBillListFirst({
           user_id: userStore.userId,
           the_time: lastMonth,
           page: 1,
           page_size: 100,
           type: 1
         }),
-        getBillList({
+        getBillListFirst({
           user_id: userStore.userId,
           the_time: lastMonth,
           page: 1,

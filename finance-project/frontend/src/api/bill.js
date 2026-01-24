@@ -122,6 +122,26 @@ export function getBillList(params) {
 }
 
 /**
+ * 获取账单列表（不分页）
+ * @param {Object} params
+ * @param {number} params.user_id - 用户ID
+ * @param {string} params.the_time - 月份（YYYY-MM格式，如"2026-01"）
+ * @param {number} params.type - 类型：1=收入，2=支出
+ * @returns {Promise}
+ */
+export function getBillListFirst(params) {
+  return request({
+    url: '/bill/list_first',
+    method: 'get',
+    params: {
+      user_id: params.user_id,
+      the_time: params.the_time,
+      type: params.type
+    }
+  })
+}
+
+/**
  * 账单数据转换工具类
  * 用于前端数据模型与后端数据模型之间的转换
  */
