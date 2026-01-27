@@ -67,29 +67,21 @@ export default function useDashboardLogic() {
         getBillListFirst({
           user_id: userStore.userId,
           the_time: currentMonth,
-          page: 1,
-          page_size: 100,
           type: 1 // 1=收入
         }),
         getBillListFirst({
           user_id: userStore.userId,
           the_time: currentMonth,
-          page: 1,
-          page_size: 100,
           type: 2 // 2=支出
         }),
         getBillListFirst({
           user_id: userStore.userId,
           the_time: lastMonth,
-          page: 1,
-          page_size: 100,
           type: 1
         }),
         getBillListFirst({
           user_id: userStore.userId,
           the_time: lastMonth,
-          page: 1,
-          page_size: 100,
           type: 2
         }),
         // 获取当月预算数据
