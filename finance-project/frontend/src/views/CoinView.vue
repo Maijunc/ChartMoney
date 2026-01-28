@@ -461,16 +461,8 @@ const handleJumpToSettings = () => {
   router.push('/settings')
 }
 
-// 获取dashboard逻辑变量（移除未使用的变量，减少冗余）
-const { initTrendChart, initCategoryChart } = useDashboardLogic()
-
 // ========== 页面挂载初始化 ==========
 onMounted(async () => {
-  // 增加DOM存在性判断，防止图表初始化失败
-  setTimeout(() => {
-    initTrendChart()
-    initCategoryChart()
-  }, 100)
 
   initYearOptions() // 初始化年份选择器
 
@@ -1076,9 +1068,9 @@ const handleDeleteIncome = (billId) => {
           bill_id: billId
         })
         ElMessage.success('删除成功！')
-
-        // 重新加载数据
-        await initIncomeData()
+        incomeList.value = incomeList.value.filter((item) => item.id !== billId)
+        originIncomeList.value = originIncomeList.value.filter((item) => item.id !== billId)
+        totalIncome.value = incomeList.value.length
       } catch (error) {
         console.error('删除失败:', error)
         ElMessage.error('删除失败，请重试')

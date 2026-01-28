@@ -37,7 +37,7 @@
           </el-menu-item>
 
           <!-- 支出管理作为父级折叠菜单，包含信用卡借入记录子项 -->
-          <el-menu-item index="Goods" style="color: rgb(64, 158, 255) !important"  @click="handleJumpToRecord()">
+          <el-menu-item index="Goods" style="color: rgb(64, 158, 255) !important"  @click="handleJumpToExpend()">
             <template #title>
               <el-icon><Goods /></el-icon>
               <span>支出管理</span>
@@ -91,16 +91,65 @@
           <!-- 搜索区域 -->
           <div class="search-bar" style="margin-bottom: 20px">
             <el-form :inline="true" :model="searchForm" class="expense-search-form">
-              <el-form-item label="支出日期">
-                <el-date-picker
-                  v-model="searchForm.date"
-                  type="date"
-                  placeholder="选择日期"
-                  format="YYYY-MM-DD"
-                  value-format="YYYY-MM-DD"
-                  style="width: 200px"
-                  clearable
-                />
+              <!-- 日期筛选：动态选择器 -->
+              <el-form-item label="日期筛选">
+                <div class="dynamic-date-filter">
+                  <!-- 筛选粒度选择 -->
+                  <el-select
+                    v-model="searchForm.dateType"
+                    placeholder="筛选方式"
+                    style="width: 100px; margin-right: 10px"
+                    @change="handleDateTypeChange"
+                    clearable
+                  >
+                    <el-option label="按日筛选" value="day"></el-option>
+                    <el-option label="按月筛选" value="month"></el-option>
+                    <el-option label="按年筛选" value="year"></el-option>
+                  </el-select>
+
+                  <!-- 动态日期选择器 -->
+                  <template v-if="searchForm.dateType === 'day'">
+                    <el-date-picker
+                      v-model="searchForm.dateValue"
+                      type="date"
+                      placeholder="选择日期"
+                      format="YYYY-MM-DD"
+                      value-format="YYYY-MM-DD"
+                      style="width: 150px"
+                      :locale="zhCn"
+                      clearable
+                    />
+                  </template>
+
+                  <template v-else-if="searchForm.dateType === 'month'">
+                    <el-date-picker
+                      v-model="searchForm.dateValue"
+                      type="month"
+                      placeholder="选择月份"
+                      format="YYYY-MM"
+                      value-format="YYYY-MM"
+                      style="width: 150px"
+                      :locale="zhCn"
+                      clearable
+                    />
+                  </template>
+
+                  <template v-else-if="searchForm.dateType === 'year'">
+                    <el-select
+                      v-model="searchForm.dateValue"
+                      placeholder="选择年份"
+                      style="width: 150px"
+                      clearable
+                    >
+                      <el-option
+                        v-for="year in yearOptions"
+                        :key="year"
+                        :label="`${year}年`"
+                        :value="year.toString()"
+                      />
+                    </el-select>
+                  </template>
+                </div>
               </el-form-item>
 
               <el-form-item label="消费种类">
@@ -402,9 +451,6 @@ const handleJumpToBudgetView = () => {
 const handleJumpToCoin = () => {
   router.push('/coin')
 }
-const handleJumpToRecord = () => {
-  router.push('/record')
-}
 const handleJumpToSettings = () => {
   router.push('/settings')
 }
@@ -433,13 +479,58 @@ const activePageKey = ref('menu-management')
 
 // 搜索表单
 const searchForm = ref({
-  date: '', // 支出日期
+  dateType: '',      // 筛选方式：day/month/year
+  dateValue: '',     // 筛选值：YYYY-MM-DD / YYYY-MM / YYYY
   type: '', // 消费种类
   paymentMethod: '', // 支付方式
   amount: '', // 消费金额
   name: '', // 消费名称
   remark: '', // 备注
 })
+
+// 年份选项
+const yearOptions = ref([])
+
+// 初始化年份选项
+const initYearOptions = () => {
+  const currentYear = new Date().getFullYear()
+  const years = []
+  // 生成最近10年的选项（可根据需要调整）
+  for (let i = 0; i < 10; i++) {
+    years.push(currentYear - i)
+  }
+  yearOptions.value = years
+}
+
+// 筛选方式变化时的处理
+const handleDateTypeChange = (newType) => {
+  // 切换筛选方式时，清空原来的值
+  searchForm.value.dateValue = ''
+
+  // 根据选择的筛选方式，设置默认值
+  if (newType) {
+    const now = new Date()
+    switch (newType) {
+      case 'day':
+        searchForm.value.dateValue = formatDate(now)
+        break
+      case 'month':
+        searchForm.value.dateValue = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+        break
+      case 'year':
+        searchForm.value.dateValue = now.getFullYear().toString()
+        break
+    }
+  }
+}
+
+// 日期格式化辅助函数
+const formatDate = (date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
 
 // ========== 改造：支出列表数据（扩展为50条模拟数据，增加ID） ==========
 const expenseList = ref([]) // 筛选后的数据
@@ -860,20 +951,18 @@ const handleDeleteExpense = (id) => {
     cancelButtonText: '取消',
     type: 'warning',
   })
-    .then(() => {
+    .then(async () => {
+      await deleteBill({
+          user_id: userStore.userId,
+          bill_id: id
+        })
+      ElMessage.success('删除成功！')
       expenseList.value = expenseList.value.filter((item) => item.id !== id)
       originExpenseList.value = originExpenseList.value.filter((item) => item.id !== id)
       totalExpense.value = expenseList.value.length
-      ElMessage({
-        type: 'success',
-        message: '删除成功!',
-      })
     })
     .catch(() => {
-      ElMessage({
-        type: 'info',
-        message: '已取消删除',
-      })
+      ElMessage.info('已取消删除')
     })
 }
 
@@ -1008,6 +1097,8 @@ const handleMenuSelect = (key) => {
 
 // 页面挂载时初始化
 onMounted(async () => {
+
+
   // 初始化分类和支付方式映射
   console.log('🔄 开始初始化支出页面数据...')
 
@@ -1031,6 +1122,8 @@ onMounted(async () => {
     console.log('📝 下拉框分类列表:', expenseCategoryList.value)
     console.log('💳 下拉框支付方式列表:', paymentMethodList.value)
 
+    initYearOptions() // 初始化年份选择器
+
     // 初始化支出数据（从后端加载）
     await initExpenseData()
 
@@ -1052,9 +1145,31 @@ const handleSearch = () => {
   // 从原始数据拷贝，而非筛选后的数据
   let filteredData = JSON.parse(JSON.stringify(originExpenseList.value))
 
-  // 1. 日期筛选
-  if (searchForm.value.date) {
-    filteredData = filteredData.filter((item) => item.time === searchForm.value.date)
+  // 1.  ========== 动态日期筛选逻辑 ==========
+  if (searchForm.value.dateType && searchForm.value.dateValue) {
+    const dateType = searchForm.value.dateType
+    const dateValue = searchForm.value.dateValue
+
+    switch (dateType) {
+      case 'day':
+        // 按日筛选
+        filteredData = filteredData.filter((item) => item.time === dateValue)
+        break
+
+      case 'month':
+        // 按月筛选
+        filteredData = filteredData.filter((item) => {
+          return item.time.startsWith(dateValue) // YYYY-MM 开头
+        })
+        break
+
+      case 'year':
+        // 按年筛选
+        filteredData = filteredData.filter((item) => {
+          return item.time.startsWith(dateValue) // YYYY 开头
+        })
+        break
+    }
   }
 
   // 2. 消费种类筛选
