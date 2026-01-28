@@ -144,6 +144,7 @@
                   step="0.01"
                   style="width: 200px"
                   clearable
+                  @keydown.down.prevent
                 />
               </el-form-item>
 
@@ -263,6 +264,7 @@
                     step="0.01"
                     placeholder="输入金额"
                     style="width: 100%"
+                    @keydown.down.prevent
                   />
                   <span v-else style="color: #f44336; font-weight: 500"
                     >-{{ Number(scope.row.money).toFixed(2) }}</span

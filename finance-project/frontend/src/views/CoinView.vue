@@ -148,6 +148,7 @@
                   min="0"
                   step="0.01"
                   style="width: 200px"
+                  @keydown.down.prevent
                 ></el-input>
               </el-form-item>
 
@@ -251,6 +252,7 @@
                     step="0.01"
                     placeholder="输入金额"
                     style="width: 100%"
+                    @keydown.down.prevent
                   />
                   <span v-else style="color: #4caf50; font-weight: 500"
                     >+{{ Number(scope.row.amount).toFixed(2) }}</span
