@@ -153,7 +153,11 @@
               </el-form-item>
 
               <el-form-item label="收入来源">
-                <el-input v-model="searchForm.source" placeholder="请输入收入来源" />
+                <el-input
+                  v-model="searchForm.source"
+                  placeholder="请输入收入来源"
+                  @blur="validateSearchInput('source', '收入来源')"
+                />
               </el-form-item>
 
               <!-- 修复点4：备注标签规范化，移除无效的 word-limit-format 属性 -->
@@ -164,6 +168,7 @@
                   maxlength="80"
                   show-word-limit
                   style="width: 100%"
+                  @blur="validateSearchInput('remark', '备注')"
                 />
               </el-form-item>
 
@@ -1053,6 +1058,23 @@ const handleExportIncome = () => {
   ElMessage.success('收入数据导出成功！')
 }
 // ========== 导出功能结束 ==========
+
+// 搜索表单验证函数
+const validateSearchInput = (field, fieldName) => {
+  console.log(`验证搜索字段: ${fieldName}(${field}) = "${searchForm.value[field]}"`)
+
+  const value = searchForm.value[field]
+
+  // 如果是字符串且只包含空格
+  if (typeof value === 'string' && value.trim() === '') {
+    ElMessage.warning({
+      message: `${fieldName}不能只输入空格，已自动清空`,
+      duration: 2000,
+      showClose: true
+    })
+    searchForm.value[field] = ''  // 清空搜索表单的字段
+  }
+}
 </script>
 
 <style scoped>

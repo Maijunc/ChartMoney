@@ -152,6 +152,7 @@
                 <el-input
                   v-model="searchForm.name"
                   placeholder="请输入消费名称"
+                  @blur="validateSearchInput('name', '消费名称')"
                   style="width: 200px"
                   clearable
                 />
@@ -161,6 +162,7 @@
                 <el-input
                   v-model="searchForm.remark"
                   placeholder="请输入备注"
+                  @blur="validateSearchInput('remark', '备注')"
                   style="width: 200px"
                   clearable
                 />
@@ -1126,6 +1128,23 @@ const resetSearch = async () => {
 // 保留原有onSearch/onReset方法（兼容表单提交）
 const onSearch = handleSearch
 const onReset = resetSearch
+
+// 搜索表单验证函数
+const validateSearchInput = (field, fieldName) => {
+  console.log(`验证搜索字段: ${fieldName}(${field}) = "${searchForm.value[field]}"`)
+
+  const value = searchForm.value[field]
+
+  // 如果是字符串且只包含空格
+  if (typeof value === 'string' && value.trim() === '') {
+    ElMessage.warning({
+      message: `${fieldName}不能只输入空格，已自动清空`,
+      duration: 2000,
+      showClose: true
+    })
+    searchForm.value[field] = ''  // 清空搜索表单的字段
+  }
+}
 </script>
 
 <style scoped>
