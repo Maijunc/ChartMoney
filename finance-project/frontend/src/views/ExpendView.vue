@@ -250,6 +250,7 @@
                     v-model="scope.row.name"
                     placeholder="输入名称"
                     style="width: 100%"
+                    @blur="trimInputValue(scope.row, 'name')"
                   />
                   <span v-else>{{ scope.row.name }}</span>
                 </template>
@@ -303,6 +304,7 @@
                     v-model="scope.row.extra"
                     placeholder="输入备注（选填）"
                     style="width: 100%"
+                    @blur="trimInputValue(scope.row, 'extra')"
                   />
                   <span v-else>{{ scope.row.extra || '无' }}</span>
                 </template>
@@ -1143,6 +1145,24 @@ const validateSearchInput = (field, fieldName) => {
       showClose: true
     })
     searchForm.value[field] = ''  // 清空搜索表单的字段
+  }
+}
+
+// 自动修剪首尾空格（当输入框失去焦点时）
+const trimInputValue = (row, field) => {
+  if (!row[field]) return;
+
+  const originalValue = row[field];
+  const trimmedValue = originalValue.trim();
+
+  // 如果修剪前后不同（说明有首尾空格）
+  if (originalValue !== trimmedValue) {
+    row[field] = trimmedValue;
+
+    // 轻微提示（可选）
+    if (trimmedValue === '') {
+      ElMessage.warning(`${field === 'name' ? '消费名称' : '备注'}已清除多余空格`);
+    }
   }
 }
 </script>
