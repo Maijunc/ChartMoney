@@ -92,18 +92,65 @@
           <!-- 1. 搜索与筛选栏 -->
           <div class="search-bar" style="margin-bottom: 20px">
             <el-form :inline="true" :model="searchForm" class="income-search-form">
-              <!-- 修复：日期字段添加 value-format 确保返回字符串格式 -->
-              <el-form-item label="收入日期">
-                <el-date-picker
-                  v-model="searchForm.date"
-                  type="date"
-                  placeholder="选择日期"
-                  format="YYYY-MM-DD"
-                  value-format="YYYY-MM-DD"
-                  style="width: 200px"
-                  :locale="zhCn"
-                  clearable
-                />
+              <!-- 日期筛选：动态选择器 -->
+              <el-form-item label="日期筛选">
+                <div class="dynamic-date-filter">
+                  <!-- 筛选粒度选择 -->
+                  <el-select
+                    v-model="searchForm.dateType"
+                    placeholder="筛选方式"
+                    style="width: 100px; margin-right: 10px"
+                    @change="handleDateTypeChange"
+                    clearable
+                  >
+                    <el-option label="按日筛选" value="day"></el-option>
+                    <el-option label="按月筛选" value="month"></el-option>
+                    <el-option label="按年筛选" value="year"></el-option>
+                  </el-select>
+
+                  <!-- 动态日期选择器 -->
+                  <template v-if="searchForm.dateType === 'day'">
+                    <el-date-picker
+                      v-model="searchForm.dateValue"
+                      type="date"
+                      placeholder="选择日期"
+                      format="YYYY-MM-DD"
+                      value-format="YYYY-MM-DD"
+                      style="width: 150px"
+                      :locale="zhCn"
+                      clearable
+                    />
+                  </template>
+
+                  <template v-else-if="searchForm.dateType === 'month'">
+                    <el-date-picker
+                      v-model="searchForm.dateValue"
+                      type="month"
+                      placeholder="选择月份"
+                      format="YYYY-MM"
+                      value-format="YYYY-MM"
+                      style="width: 150px"
+                      :locale="zhCn"
+                      clearable
+                    />
+                  </template>
+
+                  <template v-else-if="searchForm.dateType === 'year'">
+                    <el-select
+                      v-model="searchForm.dateValue"
+                      placeholder="选择年份"
+                      style="width: 150px"
+                      clearable
+                    >
+                      <el-option
+                        v-for="year in yearOptions"
+                        :key="year"
+                        :label="`${year}年`"
+                        :value="year.toString()"
+                      />
+                    </el-select>
+                  </template>
+                </div>
               </el-form-item>
 
               <!-- 修复点2：收入类型字段绑定匹配 searchForm.type -->
@@ -425,6 +472,8 @@ onMounted(async () => {
     initCategoryChart()
   }, 100)
 
+  initYearOptions() // 初始化年份选择器
+
   // 初始化分类和支付方式映射
   console.log('🔄 开始初始化收入页面数据...')
 
@@ -524,13 +573,58 @@ const handleMenuSelect = (key) => {
 
 // 修复点8：搜索表单字段与模板匹配（删除冗余的min/maxAmount，新增date/source/remark/paymentMethod）
 const searchForm = ref({
-  date: '', // 收入日期
+  dateType: '',      // 筛选方式：day/month/year
+  dateValue: '',     // 筛选值：YYYY-MM-DD / YYYY-MM / YYYY
   type: '', // 收入类型
   paymentMethod: '', // 支付方式（新增）
   amount: '', // 收入金额
   source: '', // 收入来源
   remark: '', // 备注
 })
+
+// 年份选项
+const yearOptions = ref([])
+
+// 初始化年份选项
+const initYearOptions = () => {
+  const currentYear = new Date().getFullYear()
+  const years = []
+  // 生成最近10年的选项（可根据需要调整）
+  for (let i = 0; i < 10; i++) {
+    years.push(currentYear - i)
+  }
+  yearOptions.value = years
+}
+
+// 筛选方式变化时的处理
+const handleDateTypeChange = (newType) => {
+  // 切换筛选方式时，清空原来的值
+  searchForm.value.dateValue = ''
+
+  // 根据选择的筛选方式，设置默认值
+  if (newType) {
+    const now = new Date()
+    switch (newType) {
+      case 'day':
+        searchForm.value.dateValue = formatDate(now)
+        break
+      case 'month':
+        searchForm.value.dateValue = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+        break
+      case 'year':
+        searchForm.value.dateValue = now.getFullYear().toString()
+        break
+    }
+  }
+}
+
+// 日期格式化辅助函数
+const formatDate = (date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
 
 // 2. 分页相关
 const currentPage = ref(1) // 当前页码
@@ -846,9 +940,31 @@ const handleSearch = () => {
   // 关键修复：从原始数据拷贝，而非筛选后的数据
   let filteredData = JSON.parse(JSON.stringify(originIncomeList.value))
 
-  // 1. 日期筛选（value-format 已确保返回 YYYY-MM-DD 字符串格式）
-  if (searchForm.value.date) {
-    filteredData = filteredData.filter((item) => item.date === searchForm.value.date)
+  // 1.  ========== 动态日期筛选逻辑 ==========
+  if (searchForm.value.dateType && searchForm.value.dateValue) {
+    const dateType = searchForm.value.dateType
+    const dateValue = searchForm.value.dateValue
+
+    switch (dateType) {
+      case 'day':
+        // 按日筛选
+        filteredData = filteredData.filter((item) => item.date === dateValue)
+        break
+
+      case 'month':
+        // 按月筛选
+        filteredData = filteredData.filter((item) => {
+          return item.date.startsWith(dateValue) // YYYY-MM 开头
+        })
+        break
+
+      case 'year':
+        // 按年筛选
+        filteredData = filteredData.filter((item) => {
+          return item.date.startsWith(dateValue) // YYYY 开头
+        })
+        break
+    }
   }
 
   // 2. 收入类型筛选
@@ -905,7 +1021,8 @@ const handleSearch = () => {
 // 修复点10：重置搜索表单（关键修复：恢复原始数据 + 排序）
 const resetSearch = async () => {
   searchForm.value = {
-    date: '',
+    dateType: '',
+    dateValue: '',
     type: '',
     paymentMethod: '',
     amount: '',
@@ -936,12 +1053,6 @@ const getTagType = (type) => {
     其他: 'default',
   }
   return typeMap[type] || 'default'
-}
-
-// 9. 收入操作方法（实际项目中替换为接口请求）
-const handleAddIncome = () => {
-  // 新增收入逻辑，可弹出表单弹窗
-  ElMessage.info('新增收入功能待实现（推荐使用表格快速新增）')
 }
 
 // 编辑收入（改为行内编辑）
