@@ -10,12 +10,16 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import joinedload
 
 import database, models, schemas, crud, security
-from dependencies import get_current_user, get_current_user_id
+from dependencies import get_current_user
+import logging
 import os
 import uuid
 import io
 import csv
 from openpyxl import Workbook, load_workbook
+from decimal import Decimal, InvalidOperation
+
+logger = logging.getLogger(__name__)
 
 # 启动时自动在数据库建表 (C++思维：类似编译时链接)
 models.Base.metadata.create_all(bind=database.engine)  # 创建所有以Base类为基类的模型类的元数据
@@ -685,22 +689,35 @@ async def import_user_data(
         if filename.endswith(".csv"):
             csv_text = file_bytes.decode("utf-8-sig")
             reader = csv.DictReader(io.StringIO(csv_text))
-            if reader.fieldnames is None or any(col not in reader.fieldnames for col in EXPORT_COLUMNS):
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="CSV 列头不匹配导出格式")
-            rows = [row for row in reader if row.get("record_type")]
+            if reader.fieldnames is None:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="CSV 列头缺失")
+
+            header_set = {h.strip() for h in reader.fieldnames if h}
+            # 兼容：不同 record_type 行需要的列不同，这里只强制要求识别 record_type
+            required_min = {"record_type"}
+            if not required_min.issubset(header_set):
+                missing = sorted(list(required_min - header_set))
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"CSV 缺少列: {', '.join(missing)}")
+
+            rows = [row for row in reader if (row.get("record_type") or "").strip()]
         else:
             wb = load_workbook(io.BytesIO(file_bytes))
             ws = wb.active
             values = list(ws.iter_rows(values_only=True))
             if not values:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Excel 文件为空")
+
             header = [str(v).strip() if v is not None else "" for v in values[0]]
-            if any(col not in header for col in EXPORT_COLUMNS):
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Excel 列头不匹配导出格式")
+            header_set = set(header)
+            required_min = {"record_type"}
+            if not required_min.issubset(header_set):
+                missing = sorted(list(required_min - header_set))
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Excel 缺少列: {', '.join(missing)}")
+
             col_index = {name: header.index(name) for name in header}
             for row_vals in values[1:]:
                 record = {name: row_vals[col_index[name]] if col_index[name] < len(row_vals) else "" for name in header}
-                if record.get("record_type"):
+                if (record.get("record_type") or ""):
                     rows.append(record)
     except HTTPException:
         raise
@@ -714,23 +731,91 @@ async def import_user_data(
     bills_to_add: list[models.Bill] = []
     budgets_to_add: list[models.Budget] = []
 
-    for row in rows:
-        record_type = str(row.get("record_type")).strip().lower()
-        if record_type == "user":
-            row_user_id = parse_int(row.get("user_id"), "user_id")
-            if row_user_id and row_user_id != current_user.id:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="导入文件用户不匹配")
+    for idx, row in enumerate(rows, start=1):
+        record_type = str(row.get("record_type") or "").strip().lower()
+        if not record_type:
             continue
+        try:
+            if record_type == "user":
+                row_user_id = parse_int((row.get("user_id") or "").strip(), "user_id")
+                if row_user_id and row_user_id != current_user.id:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="导入文件用户不匹配")
+                continue
 
-        if record_type == "bill":
+            if record_type == "budget":
+                budget_amount = parse_decimal(str(row.get("budget_amount") or "").strip(), "budget_amount")
+                budget_month = str(row.get("budget_month") or "").strip()
+
+                # 允许空字符串/None，但如果是其它无法识别的值仍报错
+                raw_is_total = row.get("budget_is_total")
+                budget_is_total = parse_bool(raw_is_total)
+
+                category_id = parse_int(str(row.get("category_id") or "").strip(), "category_id")
+
+                if budget_amount is None or not budget_month:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="预算数据不完整")
+                if budget_is_total is None:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="budget_is_total 格式错误")
+                if not budget_is_total and category_id is None:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="非总预算必须包含分类")
+                if category_id is not None and category_id not in category_ids:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"分类不存在: {category_id}")
+
+                budgets_to_add.append(
+                    models.Budget(
+                        user_id=current_user.id,
+                        category_id=category_id,
+                        is_total=budget_is_total,
+                        amount=float(budget_amount),
+                        month=budget_month,
+                    )
+                )
+                continue
+
+            if record_type != "bill":
+                # 未知类型直接跳过
+                continue
+
+            # record_type == bill 才进入 bill 校验
             bill_name = str(row.get("bill_name") or "").strip()
-            bill_amount = parse_float(row.get("bill_amount"), "bill_amount")
-            category_id = parse_int(row.get("category_id"), "category_id")
-            method_id = parse_int(row.get("method_id"), "method_id")
+            bill_amount_raw = str(row.get("bill_amount") or "").strip()
+            bill_amount = parse_decimal(bill_amount_raw, "bill_amount")
+            category_id_raw = str(row.get("category_id") or "").strip()
+            category_id = parse_int(category_id_raw, "category_id")
+            method_id_raw = str(row.get("method_id") or "").strip()
+            method_id = parse_int(method_id_raw, "method_id")
             bill_time_str = str(row.get("bill_time") or "").strip()
 
-            if not bill_name or bill_amount is None or category_id is None or method_id is None or not bill_time_str:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="账单数据不完整")
+            # 某些情况下（例如 CSV 被 Excel/编辑器处理过）可能出现一行 record_type=bill 但其它列全空。
+            # 这种行不代表有效数据：直接跳过，避免导入失败。
+            if (
+                not bill_name
+                and not bill_amount_raw
+                and not category_id_raw
+                and not method_id_raw
+                and not bill_time_str
+                and not str(row.get("bill_remark") or "").strip()
+            ):
+                continue
+
+            missing_fields = []
+            if not bill_name:
+                missing_fields.append("bill_name")
+            if bill_amount is None:
+                missing_fields.append("bill_amount")
+            if category_id is None:
+                missing_fields.append("category_id")
+            if method_id is None:
+                missing_fields.append("method_id")
+            if not bill_time_str:
+                missing_fields.append("bill_time")
+
+            if missing_fields:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"账单数据不完整(缺少: {', '.join(missing_fields)})",
+                )
+
             if category_id not in category_ids:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"分类不存在: {category_id}")
             if method_id not in method_ids:
@@ -747,36 +832,17 @@ async def import_user_data(
                     category_id=category_id,
                     method_id=method_id,
                     name=bill_name,
-                    amount=bill_amount,
+                    amount=float(bill_amount),
                     remark=str(row.get("bill_remark") or "").strip(),
                     bill_time=bill_time,
                 )
             )
             continue
-
-        if record_type == "budget":
-            budget_amount = parse_float(row.get("budget_amount"), "budget_amount")
-            budget_month = str(row.get("budget_month") or "").strip()
-            budget_is_total = parse_bool(row.get("budget_is_total"))
-            category_id = parse_int(row.get("category_id"), "category_id")
-
-            if budget_amount is None or not budget_month:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="预算数据不完整")
-            if not budget_is_total and category_id is None:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="非总预算必须包含分类")
-            if category_id is not None and category_id not in category_ids:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"分类不存在: {category_id}")
-
-            budgets_to_add.append(
-                models.Budget(
-                    user_id=current_user.id,
-                    category_id=category_id,
-                    is_total=budget_is_total,
-                    amount=budget_amount,
-                    month=budget_month,
-                )
+        except HTTPException as e:
+            raise HTTPException(
+                status_code=e.status_code,
+                detail=f"第{idx}行({record_type})导入失败: {e.detail}",
             )
-            continue
 
     if strategy == "replace":
         try:
@@ -836,7 +902,7 @@ def clear_expired_data(payload: dict, db: Session = Depends(database.get_db)):
             models.Bill.bill_time < cutoff_date
         )
         result = db.execute(delete_stmt)
-        deleted_count = result.rowcount
+        deleted_count = getattr(result, "rowcount", 0)
 
         db.commit()
 
@@ -873,12 +939,12 @@ def clear_all_data(payload: dict, db: Session = Depends(database.get_db)):
         # 删除所有账单
         bills_delete_stmt = delete(models.Bill).where(models.Bill.user_id == user_id)
         bills_result = db.execute(bills_delete_stmt)
-        bills_count = bills_result.rowcount
+        bills_count = getattr(bills_result, "rowcount", 0)
 
         # 删除所有预算
         budgets_delete_stmt = delete(models.Budget).where(models.Budget.user_id == user_id)
         budgets_result = db.execute(budgets_delete_stmt)
-        budgets_count = budgets_result.rowcount
+        budgets_count = getattr(budgets_result, "rowcount", 0)
 
         db.commit()
 
@@ -905,40 +971,62 @@ EXPORT_COLUMNS = [
 
 
 def build_export_rows(user, bills, budgets):
-    """构建用于导出的数据行"""
-    rows = [{
+    """构建用于导出的数据行（保证每行都包含 EXPORT_COLUMNS 的所有列）"""
+
+    def _blank_row():
+        return {col: "" for col in EXPORT_COLUMNS}
+
+    rows = []
+
+    user_row = _blank_row()
+    user_row.update({
         "record_type": "user",
         "user_id": user.id,
         "username": user.username,
-    }]
+    })
+    rows.append(user_row)
+
     for bill in bills:
-        rows.append({
+        # 关联对象可能因为懒加载/会话关闭等原因不可用，所以对 id/name 做兜底
+        bill_category = getattr(bill, "bill_category", None)
+        payment_method = getattr(bill, "payment_method", None)
+
+        category_id = getattr(bill, "category_id", None) or (getattr(bill_category, "id", None) if bill_category else None)
+        method_id = getattr(bill, "method_id", None) or (getattr(payment_method, "id", None) if payment_method else None)
+
+        r = _blank_row()
+        r.update({
             "record_type": "bill",
             "user_id": user.id,
             "username": user.username,
             "bill_id": bill.id,
             "bill_name": bill.name,
-            "bill_amount": bill.amount,
-            "bill_remark": bill.remark,
-            "bill_time": bill.bill_time.isoformat() if bill.bill_time else "",
-            "category_id": bill.bill_category.id if bill.bill_category else "",
-            "category_name": bill.bill_category.name if bill.bill_category else "",
-            "category_type": bill.bill_category.type if bill.bill_category else "",
-            "method_id": bill.payment_method.id if bill.payment_method else "",
-            "method_name": bill.payment_method.name if bill.payment_method else "",
+            "bill_amount": str(bill.amount) if bill.amount is not None else "",
+            "bill_remark": bill.remark or "",
+            "bill_time": bill.bill_time.isoformat() if getattr(bill, "bill_time", None) else "",
+            "category_id": category_id or "",
+            "category_name": (bill_category.name if bill_category else ""),
+            "category_type": (bill_category.type if bill_category else ""),
+            "method_id": method_id or "",
+            "method_name": (payment_method.name if payment_method else ""),
         })
+        rows.append(r)
+
     for budget in budgets:
-        rows.append({
+        r = _blank_row()
+        r.update({
             "record_type": "budget",
             "user_id": user.id,
             "username": user.username,
             "budget_id": budget.id,
-            "budget_amount": budget.amount,
-            "budget_month": budget.month,
-            "budget_is_total": budget.is_total,
-            "category_id": budget.category_id,
+            "budget_amount": str(budget.amount) if budget.amount is not None else "",
+            "budget_month": budget.month or "",
+            "budget_is_total": bool(budget.is_total),
+            "category_id": budget.category_id or "",
             "category_name": budget.bill_category.name if budget.bill_category else "",
         })
+        rows.append(r)
+
     return rows
 
 
@@ -947,19 +1035,26 @@ def parse_int(value, field_name):
     if value is None or value == "":
         return None
     try:
-        return int(value)
+        return int(str(value).strip())
     except (ValueError, TypeError):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} 格式错误")
+
+
+def parse_decimal(value, field_name):
+    """安全地将值解析为 Decimal，避免 float 精度问题"""
+    if value is None or value == "":
+        return None
+    try:
+        # Excel 里可能是数字类型；统一转字符串再 Decimal
+        return Decimal(str(value).strip())
+    except (InvalidOperation, ValueError, TypeError):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} 格式错误")
 
 
 def parse_float(value, field_name):
-    """安全地将值解析为浮点数"""
-    if value is None or value == "":
-        return None
-    try:
-        return float(value)
-    except (ValueError, TypeError):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} 格式错误")
+    """兼容旧逻辑：尽量用 Decimal 再转 float（不推荐），保留给其他接口使用"""
+    dec = parse_decimal(value, field_name)
+    return None if dec is None else float(dec)
 
 
 def parse_bool(value):
