@@ -45,8 +45,13 @@ request.interceptors.response.use(
       console.log('✅ Response:', response.config.url, response.data)
     }
 
+    // 文件下载直接返回响应
+    if (response.config.responseType === 'blob') {
+      return response
+    }
+
     // 后端返回的数据结构：{ code, message, data }
-    const { code, message, data } = response.data
+    const { code, message } = response.data
 
     // 成功响应（200）
     if (code === 200) {

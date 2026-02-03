@@ -49,19 +49,39 @@ export function uploadAvatar(file) {
 }
 
 /**
- * 导出用户数据
- * @param {number} userId - 用户ID
+ * 导出用户数据（CSV/XLSX）
+ * @param {string} format - csv 或 xlsx
  * @returns {Promise}
  */
-export function exportUserData(userId) {
+export function exportUserData(format = 'csv') {
   return request({
     url: '/user/export',
     method: 'get',
-    params: { user_id: userId },
+    params: { format },
     responseType: 'blob'
   })
 }
 
+/**
+ * 导入用户数据（CSV/XLSX）
+ * @param {File} file - 导入文件
+ * @param {string} strategy - merge 或 replace
+ * @returns {Promise}
+ */
+export function importUserData(file, strategy = 'merge') {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  return request({
+    url: '/user/import',
+    method: 'post',
+    params: { strategy },
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+}
 
 /**
  * 清空所有数据

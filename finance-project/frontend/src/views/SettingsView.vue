@@ -279,6 +279,20 @@
                 <div class="data-management">
                   <el-card>
                     <h3 style="margin-top: 0">数据备份与恢复</h3>
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px">
+                      <span>导出格式：</span>
+                      <el-select v-model="exportFormat" style="width: 140px">
+                        <el-option label="CSV" value="csv" />
+                        <el-option label="Excel (.xlsx)" value="xlsx" />
+                      </el-select>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px">
+                      <span>导入策略：</span>
+                      <el-select v-model="importStrategy" style="width: 160px">
+                        <el-option label="合并（追加导入）" value="merge" />
+                        <el-option label="覆盖（清空后导入）" value="replace" />
+                      </el-select>
+                    </div>
                     <el-button
                       type="primary"
                       icon="Download"
@@ -288,10 +302,10 @@
                       导出所有数据
                     </el-button>
                     <el-upload
-                      action="/api/import/data"
                       :show-file-list="false"
-                      :on-success="handleImportSuccess"
-                      accept=".json,.csv"
+                      :http-request="handleImportRequest"
+                      :before-upload="beforeImportUpload"
+                      accept=".csv,.xlsx"
                       style="display: inline-block"
                     >
                       <el-button type="success" icon="Upload">导入数据</el-button>
@@ -309,7 +323,7 @@
                     <el-button
                       type="danger"
                       icon="Delete"
-                      @click="handleClearData('all')"
+                      @click="handleClearData"
                       :loading="clearingData"
                     >
                       清空所有数据
@@ -338,8 +352,20 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user.js'
 import useDashboardLogic from '@/stores/dashboardLogic.js'
-import { getUserInfo, updateUserInfo, uploadAvatar, exportUserData, clearAllData } from '@/api/user'
-import { getBillList } from '@/api/bill'
+import { getUserInfo, updateUserInfo, uploadAvatar, exportUserData, importUserData, clearAllData } from '@/api/user'
+import {
+  User,
+  House,
+  Coin,
+  Goods,
+  Tickets,
+  DataAnalysis,
+  Tools,
+  Download,
+  Upload,
+  Delete,
+  SwitchButton
+} from '@element-plus/icons-vue'
 
 // 路由跳转逻辑
 const router = useRouter()
@@ -388,26 +414,7 @@ const handleLogout = async () => {
 }
 
 // 获取dashboard逻辑变量
-const {
-  notificationCount,
-  monthlyIncome,
-  monthlyExpense,
-  monthlyBudget,
-  incomeGrowth,
-  expenseGrowth,
-  balanceRate,
-  budgetUsage,
-  trendTimeRange,
-  showAllExpense,
-  recentBills,
-  handleAddBill,
-  handleSetBudget,
-  handleViewReport,
-  handleDataExport,
-  toggleExpenseType,
-  initTrendChart,
-  initCategoryChart,
-} = useDashboardLogic()
+const { initTrendChart, initCategoryChart } = useDashboardLogic()
 
 // 页面挂载初始化图表
 onMounted(() => {
@@ -421,18 +428,6 @@ onMounted(() => {
   loadUserInfo()
 })
 
-// 顶部标签页数据（修复activePath初始值匹配）
-const tagsList = ref([
-  { key: 'dashboard', label: '仪表盘' },
-  { key: 'user', label: '首页' },
-  { key: 'coin', label: '收入管理' },
-  { key: 'Goods', label: '支出管理' },
-  { key: 'Tickets', label: '购物预算管理' },
-  { key: 'DataAnalysis', label: '消费年度总结' },
-  { key: 'Tools', label: '设置' },
-])
-const activePath = ref('dashboard') // 修复：匹配标签页key，而非path
-
 // 页面内标签页数据（修复key匹配）
 const pageTagsList = ref([
   { key: 'dashboard', label: '仪表盘' },
@@ -443,20 +438,6 @@ const pageTagsList = ref([
   { key: 'DataAnalysis', label: '消费年度总结' },
 ])
 const activePageKey = ref('dashboard') // 修复：初始值匹配标签页key
-
-// 顶部标签页-关闭（修复判断key而非path）
-const handleCloseTag = (index) => {
-  const closedTag = tagsList.value[index]
-  tagsList.value.splice(index, 1)
-  if (closedTag?.key === activePath.value) {
-    activePath.value = tagsList.value[tagsList.value.length - 1]?.key || 'dashboard'
-  }
-}
-
-// 顶部标签页-点击切换
-const handleTagClick = (key) => {
-  activePath.value = key
-}
 
 // 页面内标签页-关闭
 const handleClosePageTag = (index) => {
@@ -678,27 +659,36 @@ const resetPreferenceForm = () => {
 
 // 数据管理相关
 const clearingData = ref(false)
+const exportFormat = ref('csv')
+const importStrategy = ref('merge')
+
+const getDownloadFilename = (disposition, fallbackName) => {
+  if (!disposition) return fallbackName
+  const match = /filename=([^;]+)/i.exec(disposition)
+  if (!match) return fallbackName
+  return match[1].replace(/"/g, '').trim() || fallbackName
+}
 
 // 导出数据
 const exportData = async () => {
   try {
     ElMessage.info('开始导出数据，请稍候...')
 
-    const userId = currentUserId.value
-    if (!userId) {
+    if (!userStore.isLogin) {
       ElMessage.warning('请先登录')
       return
     }
 
-    // 调用导出API
-    const response = await exportUserData(userId)
+    const response = await exportUserData(exportFormat.value)
+    const blob = response.data
 
-    // 创建下载链接
-    const blob = new Blob([JSON.stringify(response, null, 2)], { type: 'application/json' })
+    const fallbackName = `finance_export_${new Date().toISOString().split('T')[0]}.${exportFormat.value}`
+    const filename = getDownloadFilename(response.headers['content-disposition'], fallbackName)
+
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `财务数据导出_${new Date().toISOString().split('T')[0]}.json`
+    link.download = filename
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -711,17 +701,41 @@ const exportData = async () => {
   }
 }
 
+const beforeImportUpload = (file) => {
+  const name = (file.name || '').toLowerCase()
+  if (!name.endsWith('.csv') && !name.endsWith('.xlsx')) {
+    ElMessage.error('仅支持 CSV 或 XLSX 文件')
+    return false
+  }
+  return true
+}
+
+const handleImportRequest = async (options) => {
+  try {
+    if (!userStore.isLogin) {
+      ElMessage.warning('请先登录')
+      return
+    }
+
+    const response = await importUserData(options.file, importStrategy.value)
+    handleImportSuccess(response)
+  } catch (error) {
+    console.error('导入数据失败:', error)
+    ElMessage.error(error.response?.data?.detail || '数据导入失败，请稍后重试')
+  }
+}
+
 // 导入数据成功处理
 const handleImportSuccess = (response) => {
   if (response.code === 200) {
-    ElMessage.success('数据导入成功！')
+    ElMessage.success(`数据导入成功！账单 ${response.data?.bills_imported ?? 0} 条，预算 ${response.data?.budgets_imported ?? 0} 条`)
   } else {
-    ElMessage.error('数据导入失败：' + response.msg)
+    ElMessage.error('数据导入失败：' + (response.message || response.msg || '未知错误'))
   }
 }
 
 // 清理数据
-const handleClearData = async (type) => {
+const handleClearData = async () => {
   const message = '确定要清空所有数据吗？此操作将删除您的所有财务记录，且不可恢复！'
 
   try {

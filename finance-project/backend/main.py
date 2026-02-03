@@ -6,10 +6,16 @@ from sqlalchemy import select, delete
 from datetime import datetime, timedelta
 from fastapi import File, UploadFile
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import joinedload
+
 import database, models, schemas, crud, security
 from dependencies import get_current_user, get_current_user_id
 import os
 import uuid
+import io
+import csv
+from openpyxl import Workbook, load_workbook
 
 # 启动时自动在数据库建表 (C++思维：类似编译时链接)
 models.Base.metadata.create_all(bind=database.engine)  # 创建所有以Base类为基类的模型类的元数据
@@ -595,78 +601,210 @@ def get_propotion_month(user_id: int = Query(..., ge=1),
         }
 
 
-# 导出用户数据（包括账单、预算等）
+# 导出用户数据（CSV/Excel，需登录）
 @app.get("/user/export")
-def export_user_data(user_id: int = Query(..., ge=1), db: Session = Depends(database.get_db)):
+def export_user_data(
+    format: str = Query("csv", pattern="^(csv|xlsx)$"),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(database.get_db),
+):
     """
-    导出用户的所有财务数据
+    导出用户的所有财务数据（CSV 或 Excel）
     """
-    # 验证用户是否存在
-    result = db.execute(select(models.User).where(models.User.id == user_id))
-    user = result.scalar_one_or_none()
-
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
-
     try:
-        # 获取所有账单
-        bills_result = db.execute(
+        bills = db.scalars(
             select(models.Bill)
-            .where(models.Bill.user_id == user_id)
+            .options(joinedload(models.Bill.bill_category), joinedload(models.Bill.payment_method))
+            .where(models.Bill.user_id == current_user.id)
             .order_by(models.Bill.bill_time.desc())
-        )
-        bills = bills_result.scalars().all()
+        ).all()
 
-        # 获取所有预算
-        budgets_result = db.execute(
+        budgets = db.scalars(
             select(models.Budget)
-            .where(models.Budget.user_id == user_id)
+            .where(models.Budget.user_id == current_user.id)
+        ).all()
+
+        rows = build_export_rows(current_user, bills, budgets)
+
+        if format == "csv":
+            csv_buffer = io.StringIO()
+            writer = csv.DictWriter(csv_buffer, fieldnames=EXPORT_COLUMNS)
+            writer.writeheader()
+            writer.writerows(rows)
+
+            data = csv_buffer.getvalue().encode("utf-8")
+            filename = f"finance_export_{datetime.now().strftime('%Y%m%d')}.csv"
+            headers = {"Content-Disposition": f"attachment; filename={filename}"}
+            return StreamingResponse(io.BytesIO(data), media_type="text/csv", headers=headers)
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "data"
+        ws.append(EXPORT_COLUMNS)
+        for row in rows:
+            ws.append([row.get(col, "") for col in EXPORT_COLUMNS])
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        filename = f"finance_export_{datetime.now().strftime('%Y%m%d')}.xlsx"
+        headers = {"Content-Disposition": f"attachment; filename={filename}"}
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers=headers,
         )
-        budgets = budgets_result.scalars().all()
-
-        # 构建导出数据
-        export_data = {
-            "user": {
-                "id": user.id,
-                "username": user.username,
-                "phone": user.phone,
-                "avatar": user.avatar or ""
-            },
-            "bills": [
-                {
-                    "id": bill.id,
-                    "name": bill.name,
-                    "amount": float(bill.amount),
-                    "category_id": bill.category_id,
-                    "method_id": bill.method_id,
-                    "bill_time": bill.bill_time.isoformat() if bill.bill_time else None,
-                    "remark": bill.remark or ""
-                }
-                for bill in bills
-            ],
-            "budgets": [
-                {
-                    "id": budget.id,
-                    "category_id": budget.category_id,
-                    "amount": float(budget.amount),
-                    "month": budget.month,
-                    "is_total": budget.is_total
-                }
-                for budget in budgets
-            ],
-            "export_time": datetime.now().isoformat(),
-            "total_bills": len(bills),
-            "total_budgets": len(budgets)
-        }
-
-        return {
-            "code": status.HTTP_200_OK,
-            "message": "数据导出成功",
-            "data": export_data
-        }
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"导出数据失败: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="导出数据时发生错误")
+
+
+# 导入用户数据（CSV/Excel，需登录）
+@app.post("/user/import")
+async def import_user_data(
+    file: UploadFile = File(...),
+    strategy: str = Query("merge", pattern="^(merge|replace)$"),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """
+    导入用户的财务数据（CSV 或 Excel），格式需与导出一致
+    strategy=merge 追加导入；strategy=replace 先清空再导入
+    """
+    filename = (file.filename or "").lower()
+    if not (filename.endswith(".csv") or filename.endswith(".xlsx")):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="仅支持 CSV 或 XLSX 文件")
+
+    file_bytes = await file.read()
+    rows: list[dict] = []
+
+    try:
+        if filename.endswith(".csv"):
+            csv_text = file_bytes.decode("utf-8-sig")
+            reader = csv.DictReader(io.StringIO(csv_text))
+            if reader.fieldnames is None or any(col not in reader.fieldnames for col in EXPORT_COLUMNS):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="CSV 列头不匹配导出格式")
+            rows = [row for row in reader if row.get("record_type")]
+        else:
+            wb = load_workbook(io.BytesIO(file_bytes))
+            ws = wb.active
+            values = list(ws.iter_rows(values_only=True))
+            if not values:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Excel 文件为空")
+            header = [str(v).strip() if v is not None else "" for v in values[0]]
+            if any(col not in header for col in EXPORT_COLUMNS):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Excel 列头不匹配导出格式")
+            col_index = {name: header.index(name) for name in header}
+            for row_vals in values[1:]:
+                record = {name: row_vals[col_index[name]] if col_index[name] < len(row_vals) else "" for name in header}
+                if record.get("record_type"):
+                    rows.append(record)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"导入解析失败: {e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="导入文件解析失败")
+
+    category_ids = {c.id for c in db.scalars(select(models.Bill_Category)).all()}
+    method_ids = {m.id for m in db.scalars(select(models.Payment_Method)).all()}
+
+    bills_to_add: list[models.Bill] = []
+    budgets_to_add: list[models.Budget] = []
+
+    for row in rows:
+        record_type = str(row.get("record_type")).strip().lower()
+        if record_type == "user":
+            row_user_id = parse_int(row.get("user_id"), "user_id")
+            if row_user_id and row_user_id != current_user.id:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="导入文件用户不匹配")
+            continue
+
+        if record_type == "bill":
+            bill_name = str(row.get("bill_name") or "").strip()
+            bill_amount = parse_float(row.get("bill_amount"), "bill_amount")
+            category_id = parse_int(row.get("category_id"), "category_id")
+            method_id = parse_int(row.get("method_id"), "method_id")
+            bill_time_str = str(row.get("bill_time") or "").strip()
+
+            if not bill_name or bill_amount is None or category_id is None or method_id is None or not bill_time_str:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="账单数据不完整")
+            if category_id not in category_ids:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"分类不存在: {category_id}")
+            if method_id not in method_ids:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"支付方式不存在: {method_id}")
+
+            try:
+                bill_time = datetime.fromisoformat(bill_time_str)
+            except ValueError:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="bill_time 格式错误")
+
+            bills_to_add.append(
+                models.Bill(
+                    user_id=current_user.id,
+                    category_id=category_id,
+                    method_id=method_id,
+                    name=bill_name,
+                    amount=bill_amount,
+                    remark=str(row.get("bill_remark") or "").strip(),
+                    bill_time=bill_time,
+                )
+            )
+            continue
+
+        if record_type == "budget":
+            budget_amount = parse_float(row.get("budget_amount"), "budget_amount")
+            budget_month = str(row.get("budget_month") or "").strip()
+            budget_is_total = parse_bool(row.get("budget_is_total"))
+            category_id = parse_int(row.get("category_id"), "category_id")
+
+            if budget_amount is None or not budget_month:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="预算数据不完整")
+            if not budget_is_total and category_id is None:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="非总预算必须包含分类")
+            if category_id is not None and category_id not in category_ids:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"分类不存在: {category_id}")
+
+            budgets_to_add.append(
+                models.Budget(
+                    user_id=current_user.id,
+                    category_id=category_id,
+                    is_total=budget_is_total,
+                    amount=budget_amount,
+                    month=budget_month,
+                )
+            )
+            continue
+
+    if strategy == "replace":
+        try:
+            db.execute(delete(models.Bill).where(models.Bill.user_id == current_user.id))
+            db.execute(delete(models.Budget).where(models.Budget.user_id == current_user.id))
+        except Exception as e:
+            db.rollback()
+            print(f"清空旧数据失败: {e}")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="清空旧数据失败")
+
+    try:
+        if bills_to_add:
+            db.add_all(bills_to_add)
+        if budgets_to_add:
+            db.add_all(budgets_to_add)
+        db.commit()
+        return {
+            "code": status.HTTP_200_OK,
+            "message": "数据导入成功",
+            "data": {
+                "bills_imported": len(bills_to_add),
+                "budgets_imported": len(budgets_to_add),
+            },
+        }
+    except Exception as e:
+        db.rollback()
+        print(f"导入数据失败: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="导入数据时发生错误")
 
 
 # 清理过期数据
@@ -756,3 +894,80 @@ def clear_all_data(payload: dict, db: Session = Depends(database.get_db)):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="清空数据时发生错误")
 
 
+# 定义导出列
+EXPORT_COLUMNS = [
+    "record_type", "user_id", "username",
+    "bill_id", "bill_name", "bill_amount", "bill_remark", "bill_time",
+    "category_id", "category_name", "category_type",
+    "method_id", "method_name",
+    "budget_id", "budget_amount", "budget_month", "budget_is_total"
+]
+
+
+def build_export_rows(user, bills, budgets):
+    """构建用于导出的数据行"""
+    rows = [{
+        "record_type": "user",
+        "user_id": user.id,
+        "username": user.username,
+    }]
+    for bill in bills:
+        rows.append({
+            "record_type": "bill",
+            "user_id": user.id,
+            "username": user.username,
+            "bill_id": bill.id,
+            "bill_name": bill.name,
+            "bill_amount": bill.amount,
+            "bill_remark": bill.remark,
+            "bill_time": bill.bill_time.isoformat() if bill.bill_time else "",
+            "category_id": bill.bill_category.id if bill.bill_category else "",
+            "category_name": bill.bill_category.name if bill.bill_category else "",
+            "category_type": bill.bill_category.type if bill.bill_category else "",
+            "method_id": bill.payment_method.id if bill.payment_method else "",
+            "method_name": bill.payment_method.name if bill.payment_method else "",
+        })
+    for budget in budgets:
+        rows.append({
+            "record_type": "budget",
+            "user_id": user.id,
+            "username": user.username,
+            "budget_id": budget.id,
+            "budget_amount": budget.amount,
+            "budget_month": budget.month,
+            "budget_is_total": budget.is_total,
+            "category_id": budget.category_id,
+            "category_name": budget.bill_category.name if budget.bill_category else "",
+        })
+    return rows
+
+
+def parse_int(value, field_name):
+    """安全地将值解析为整数"""
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} 格式错误")
+
+
+def parse_float(value, field_name):
+    """安全地将值解析为浮点数"""
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} 格式错误")
+
+
+def parse_bool(value):
+    """安全地将值解析为布尔值"""
+    if isinstance(value, bool):
+        return value
+    if str(value).strip().lower() in ("true", "1", "yes"):
+        return True
+    if str(value).strip().lower() in ("false", "0", "no", ""):
+        return False
+    return None
