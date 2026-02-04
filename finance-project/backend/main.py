@@ -19,6 +19,7 @@ import csv
 from openpyxl import Workbook, load_workbook
 from decimal import Decimal, InvalidOperation
 from verification import send_sms, verify_sms
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -96,11 +97,11 @@ def user_login(user: schemas.User, db: Session = Depends(database.get_db)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误")
 
 
-# 绑定手机号发送验证码
-@app.post('/user/send_verify_code')
-def send_verify_code(phone: schemas.User_phone, db: Session = Depends(database.get_db)):
+# 绑定手机号发送验证码(登录注册)
+@app.post('/user/send_verify_code_rl')
+def send_verify_code_rl(phone: schemas.User_phone):
     try:
-        send_sms(phone_number=phone.phone)
+        send_sms(phone_number=phone.phone, code=settings.alibabacloud_sms_template_code_rl)
         return {
             "code": status.HTTP_200_OK,
             "message": "验证码发送成功"
@@ -111,7 +112,7 @@ def send_verify_code(phone: schemas.User_phone, db: Session = Depends(database.g
 
 # 绑定手机号验证验证码
 @app.post('/user/verify_code')
-def verify_code(phone_code: schemas.User_phone_code, db: Session = Depends(database.get_db)):
+def verify_code(phone_code: schemas.User_phone_code):
     try:
         verify_sms(phone_number=phone_code.phone, verify_code=phone_code.verify_code)
         return {

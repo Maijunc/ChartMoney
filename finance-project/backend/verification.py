@@ -15,14 +15,15 @@ from aliyun_client import sms_client
 from config import settings
 
 def send_sms(
-        phone_number: str
+        phone_number: str,
+        code: str
     ) -> None:
         # client = Sample.create_client()
         client = sms_client
         send_sms_verify_code_request = dypnsapi_20170525_models.SendSmsVerifyCodeRequest(
             phone_number=phone_number,
             sign_name=settings.alibabacloud_sms_sign_name,
-            template_code=settings.alibabacloud_sms_template_code,
+            template_code=code,
             template_param=settings.alibabacloud_sms_template_params
         )
         runtime = util_models.RuntimeOptions()

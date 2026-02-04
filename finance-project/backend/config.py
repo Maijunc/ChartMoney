@@ -31,10 +31,30 @@ class Settings(BaseSettings):
         description="短信签名"
     )
     
-    alibabacloud_sms_template_code: str = Field(
+    alibabacloud_sms_template_code_rl: str = Field(
         ...,
-        alias="ALIBABA_CLOUD_SMS_TEMPLATE_CODE",
-        description="短信模板CODE"
+        alias="ALIBABA_CLOUD_SMS_TEMPLATE_CODE1",
+        description="短信模板CODE(登陆注册)"
+    )
+    alibabacloud_sms_template_code_update: str = Field(
+        ...,
+        alias="ALIBABA_CLOUD_SMS_TEMPLATE_CODE2",
+        description="短信模板CODE(更新手机)"
+    )
+    alibabacloud_sms_template_code_update_password: str = Field(
+        ...,
+        alias="ALIBABA_CLOUD_SMS_TEMPLATE_CODE3",
+        description="短信模板CODE(更新密码)"
+    )
+    alibabacloud_sms_template_code_verify_new: str = Field(
+        ...,
+        alias="ALIBABA_CLOUD_SMS_TEMPLATE_CODE4",
+        description="短信模板CODE(绑定新手机，但感觉用不着)"
+    )
+    alibabacloud_sms_template_code_verify_phone: str = Field(
+        ...,
+        alias="ALIBABA_CLOUD_SMS_TEMPLATE_CODE5",
+        description="短信模板CODE(验证手机)"
     )
     alibabacloud_sms_template_params: str = Field(
         ...,
