@@ -15,6 +15,17 @@ class User(BaseModel):
     password: str = Field(..., min_length=1, max_length=64)
 
 
+# 手机获取验证码
+class User_phone(BaseModel):
+    phone: str = Field(..., min_length=11, max_length=11, pattern=r"^1\d{10}$")
+
+
+# 手机验证验证码
+class User_phone_code(BaseModel):
+    phone: str = Field(..., min_length=11, max_length=11, pattern=r"^1\d{10}$")
+    verify_code: str = Field(..., min_length=4, max_length=4, pattern=r"^\d{4}$")
+
+
 # 用于用户注册
 class User_register(BaseModel):
     # 必须接收用户名和手机号作为参数，且用户名和手机号在数据库中都必须唯一

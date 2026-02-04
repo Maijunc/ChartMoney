@@ -18,6 +18,7 @@ import io
 import csv
 from openpyxl import Workbook, load_workbook
 from decimal import Decimal, InvalidOperation
+from verification import send_sms, verify_sms
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,32 @@ def user_login(user: schemas.User, db: Session = Depends(database.get_db)):
     else:
         # 统一返回"用户名或密码错误"，不区分是用户不存在还是密码错误（安全考虑）
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误")
+
+
+# 绑定手机号发送验证码
+@app.post('/user/send_verify_code')
+def send_verify_code(phone: schemas.User_phone, db: Session = Depends(database.get_db)):
+    try:
+        send_sms(phone_number=phone.phone)
+        return {
+            "code": status.HTTP_200_OK,
+            "message": "验证码发送成功"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="验证码发送失败")
+    
+
+# 绑定手机号验证验证码
+@app.post('/user/verify_code')
+def verify_code(phone_code: schemas.User_phone_code, db: Session = Depends(database.get_db)):
+    try:
+        verify_sms(phone_number=phone_code.phone, verify_code=phone_code.verify_code)
+        return {
+            "code": status.HTTP_200_OK,
+            "message": "验证码验证成功"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="验证码验证失败")
 
 
 # 用户注册处理函数
