@@ -1,18 +1,7 @@
 <template>
   <div class="mine-admin-container">
     <!-- 顶部导航 -->
-    <div class="top-nav" style="position: fixed; left: 30px">
-      <div class="logo">MyFinancePal</div>
-      <!--我的财务伙伴 -->
-      <div class="breadcrumb" style="">仪表盘 / 支出管理</div>
-      <div class="tags-container"></div>
-      <div class="user-info">
-        <!-- 改为直接使用User组件（全局注册后） -->
-        <el-avatar>
-          <el-icon><User /></el-icon>
-        </el-avatar>
-      </div>
-    </div>
+    <AppTopNav :breadcrumb="[{ label: '仪表盘', to: '/' }, { label: '支出管理' }]" />
 
     <!-- 主体区域 -->
     <div class="main-content">
@@ -77,25 +66,13 @@
       <!-- 右侧内容区 -->
       <div class="content-panel">
         <!-- 标签页导航（顶部小标签） -->
-        <div class="page-tags" style="margin-top: 60px">
-          <el-tag
-            v-for="(tag, index) in pageTagsList"
-            :key="tag.key"
-            :closable="tag.key !== 'dashboard'"
-            @close="handleClosePageTag(index)"
-            @click="handlePageTagClick(tag.key)"
-            :effect="activePageKey === tag.key ? 'dark' : 'light'"
-            class="page-tag-item"
-          >
-            {{ tag.label }}
-          </el-tag>
-        </div>
+        <PageTagsNav :paddingTop="60" />
 
         <!-- 菜单管理内容 -->
         <div class="menu-management-panel">
           <!-- 搜索区域 -->
           <div class="search-bar">
-            <el-form inline="false" @submit.prevent="onSearch">
+            <el-form :inline="false" @submit.prevent="onSearch">
               <el-form-item label="创建时间">
                 <el-date-picker
                   v-model="searchForm.createTime"
@@ -192,36 +169,15 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue' // 引入Element Plus图标\添加onMounted的导入
-
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import AppTopNav from '@/components/AppTopNav.vue'
+import PageTagsNav from '@/components/PageTagsNav.vue'
+
 const router = useRouter()
 const handleJumpToExpend = () => {
   router.push('/expend')
 }
-
-// 顶部标签页数据
-const tagsList = ref([
-  { key: 'dashboard', label: '仪表盘' },
-  { key: 'user', label: '首页' },
-  { key: 'coin', label: '收入管理' },
-  { key: 'Goods', label: '支出管理' },
-  { key: 'Tickets', label: '购物预算管理' },
-  { key: 'DataAnalysis', label: '消费年度总结' },
-  { key: 'Tools', label: '设置' },
-])
-const activePath = ref('/menu-management')
-
-// 页面内标签页数据
-const pageTagsList = ref([
-  { key: 'dashboard', label: '仪表盘' },
-  { key: 'user-management', label: '首页' },
-  { key: 'coin-management', label: '收入管理' },
-  { key: 'goods-management', label: '支出管理' },
-  { key: 'budget-management', label: '购物预算管理' },
-  { key: 'DataAnalysis-management', label: '消费年度总结' },
-])
-const activePageKey = ref('menu-management')
 
 // 搜索表单
 const searchForm = ref({
@@ -268,50 +224,11 @@ const menuList = ref([
   },
 ])
 
-// 顶部标签页-关闭
-const handleCloseTag = (index) => {
-  tagsList.value.splice(index, 1)
-  // 如果关闭的是当前激活的标签，切换到最后一个标签
-  if (tagsList.value[index]?.path === activePath.value) {
-    activePath.value = tagsList.value[tagsList.value.length - 1]?.path || '/dashboard'
-  }
-}
-
-// 顶部标签页-点击切换
-const handleTagClick = (path) => {
-  activePath.value = path
-}
-
-// 页面内标签页-关闭
-const handleClosePageTag = (index) => {
-  pageTagsList.value.splice(index, 1)
-  if (pageTagsList.value[index]?.key === activePageKey.value) {
-    activePageKey.value = pageTagsList.value[pageTagsList.value.length - 1]?.key || 'dashboard'
-  }
-}
-
-// 页面内标签页-点击切换
-const handlePageTagClick = (key) => {
-  activePageKey.value = key
-}
-
-// 左侧菜单选择
+// 左侧菜单选择（保留：这里只做激活标签页显示用途；真正的标签页导航由 PageTagsNav + router.afterEach 驱动）
 const handleMenuSelect = (key) => {
-  // 点击菜单时，自动添加到标签页（如果不存在）
-  const tagExists = pageTagsList.value.some((item) => item.key === key)
-  if (!tagExists) {
-    const labelMap = {
-      dashboard: '仪表盘',
-      'user-management': '首页',
-      'coin-management': '收入管理',
-      'goods-management': '支出管理',
-      'budget-management': '购物预算管理',
-      'DataAnalysis-management': '消费年度总结',
-    }
-    pageTagsList.value.push({ key, label: labelMap[key] })
-  }
-  activePageKey.value = key
+  // 这里不做标签数组维护，真正的标签由路由驱动
 }
+
 // 过滤消费金额：只保留非负的数字和一个小数点
 const handleMoneyInput = () => {
   searchForm.value.money = searchForm.value.money
@@ -322,7 +239,6 @@ const handleMoneyInput = () => {
     .replace(/(\.\d{2}).*/g, '$1') // 可选：限制小数点后最多2位（金额精确到分）
 }
 
-// 页面挂载时，给创建时间赋值为今天的日期
 onMounted(() => {
   const today = new Date()
   const year = today.getFullYear()

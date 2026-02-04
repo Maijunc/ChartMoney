@@ -13,6 +13,7 @@ import Login from '../views/Login.vue' //登录页面
 import Register from '../views/Register.vue' //注册页面
 
 import ApiTestView from '../views/ApiTestView.vue'
+import { useTagsViewStore } from '@/stores/tagsView.js'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -92,6 +93,17 @@ const router = createRouter({
 router.beforeEach((to) => {
   if (to.meta.title) {
     document.title = to.meta.title
+  }
+})
+
+// 路由后置：同步“标签页导航”状态
+router.afterEach((to) => {
+  // Pinia store 需要在 app.use(pinia) 之后才可用；afterEach 触发时一般已就绪
+  try {
+    const tags = useTagsViewStore()
+    tags.ensureTab(to)
+  } catch {
+    // ignore
   }
 })
 

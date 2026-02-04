@@ -5,8 +5,16 @@
       <div class="logo">MyFinancePal</div>
       <div class="breadcrumb">仪表盘 / 首页</div>
       <div class="tags-container"></div>
-      <div class="user-info">
-        <el-avatar>
+      <div class="user-info" style="display: flex; align-items: center; gap: 10px">
+        <template v-if="userStore?.isLogin">
+          <span style="font-size: 14px; color: #606266">{{ userStore.username }}</span>
+        </template>
+        <el-avatar
+          :size="32"
+          :src="userStore?.avatar || ''"
+          style="cursor: pointer"
+          @click="handleAvatarClick"
+        >
           <el-icon><User /></el-icon>
         </el-avatar>
       </div>
@@ -236,6 +244,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import useDashboardLogic from '@/stores/dashboardLogic.js'
+import { useUserStore } from '@/stores/user.js'
 
 // 路由跳转逻辑
 const router = useRouter()
@@ -276,6 +285,17 @@ const {
   initTrendChart,
   initCategoryChart,
 } = useDashboardLogic()
+
+// 用户信息（用于头像/昵称展示）
+const userStore = useUserStore()
+
+const handleAvatarClick = () => {
+  if (userStore.isLogin) {
+    router.push('/settings')
+  } else {
+    router.push('/login')
+  }
+}
 
 // 页面挂载初始化图表
 onMounted(() => {

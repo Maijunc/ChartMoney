@@ -5,9 +5,16 @@
       <div class="logo">MyFinancePal</div>
       <div class="breadcrumb" style="">仪表盘 / 支出管理-日常支出</div>
       <div class="tags-container"></div>
-      <div class="user-info">
-        <!-- 改为直接使用User组件（全局注册后） -->
-        <el-avatar>
+      <div class="user-info" style="display: flex; align-items: center; gap: 10px">
+        <template v-if="userStore?.isLogin">
+          <span style="font-size: 14px; color: #606266">{{ userStore.username }}</span>
+        </template>
+        <el-avatar
+          :size="32"
+          :src="userStore?.avatar || ''"
+          style="cursor: pointer"
+          @click="handleAvatarClick"
+        >
           <el-icon><User /></el-icon>
         </el-avatar>
       </div>
@@ -72,19 +79,7 @@
       <!-- 右侧内容区 -->
       <div class="content-panel">
         <!-- 标签页导航（顶部小标签） -->
-        <div class="page-tags" style="padding-top: 10px">
-          <el-tag
-            v-for="(tag, index) in pageTagsList"
-            :key="tag.key"
-            :closable="tag.key !== 'dashboard'"
-            @close="handleClosePageTag(index)"
-            @click="handlePageTagClick(tag.key)"
-            :effect="activePageKey === tag.key ? 'dark' : 'light'"
-            class="page-tag-item"
-          >
-            {{ tag.label }}
-          </el-tag>
-        </div>
+        <PageTagsNav :paddingTop="10" />
 
         <!-- 菜单管理内容 -->
         <div class="menu-management-panel">
@@ -420,12 +415,21 @@ import { getBillList, addBill, updateBill, deleteBill, batchDeleteBill, BillTran
 import { CategoryMapper } from '@/api/category'
 import { PaymentMethodMapper } from '@/api/payment'
 import { useUserStore } from '@/stores/user'
+import PageTagsNav from '@/components/PageTagsNav.vue'
 
 // 路由跳转逻辑
 const router = useRouter()
 
 // 获取用户信息
 const userStore = useUserStore()
+
+const handleAvatarClick = () => {
+  if (userStore.isLogin) {
+    router.push('/settings')
+  } else {
+    router.push('/login')
+  }
+}
 
 // 初始化映射器
 const categoryMapper = new CategoryMapper()
@@ -454,28 +458,6 @@ const handleJumpToCoin = () => {
 const handleJumpToSettings = () => {
   router.push('/settings')
 }
-// 顶部标签页数据
-const tagsList = ref([
-  { key: 'dashboard', label: '仪表盘' },
-  { key: 'user', label: '首页' },
-  { key: 'coin', label: '收入管理' },
-  { key: 'Goods', label: '支出管理' },
-  { key: 'Tickets', label: '购物预算管理' },
-  { key: 'DataAnalysis', label: '消费年度总结' },
-  { key: 'Tools', label: '设置' },
-])
-const activePath = ref('/menu-management')
-
-// 页面内标签页数据
-const pageTagsList = ref([
-  { key: 'dashboard', label: '仪表盘' },
-  { key: 'user-management', label: '首页' },
-  { key: 'coin-management', label: '收入管理' },
-  { key: 'goods-management', label: '支出管理' },
-  { key: 'budget-management', label: '购物预算管理' },
-  { key: 'DataAnalysis-management', label: '消费年度总结' },
-])
-const activePageKey = ref('menu-management')
 
 // 搜索表单
 const searchForm = ref({
@@ -707,7 +689,6 @@ const handleAddRow = () => {
   expenseList.value.unshift(newRow)
   originExpenseList.value.unshift(newRow)
   totalExpense.value = expenseList.value.length
-  currentPage.value = 1
 }
 
 // 处理分类改变
@@ -1050,235 +1031,9 @@ const handleExportExpense = () => {
   ElMessage.success('支出数据导出成功！')
 }
 
-// 顶部标签页-关闭
-const handleCloseTag = (index) => {
-  tagsList.value.splice(index, 1)
-  // 如果关闭的是当前激活的标签，切换到最后一个标签
-  if (tagsList.value[index]?.path === activePath.value) {
-    activePath.value = tagsList.value[tagsList.value.length - 1]?.path || '/dashboard'
-  }
-}
-
-// 顶部标签页-点击切换
-const handleTagClick = (path) => {
-  activePath.value = path
-}
-
-// 页面内标签页-关闭
-const handleClosePageTag = (index) => {
-  pageTagsList.value.splice(index, 1)
-  if (pageTagsList.value[index]?.key === activePageKey.value) {
-    activePageKey.value = pageTagsList.value[pageTagsList.value.length - 1]?.key || 'dashboard'
-  }
-}
-
-// 页面内标签页-点击切换
-const handlePageTagClick = (key) => {
-  activePageKey.value = key
-}
-
 // 左侧菜单选择
-const handleMenuSelect = (key) => {
-  // 点击菜单时，自动添加到标签页（如果不存在）
-  const tagExists = pageTagsList.value.some((item) => item.key === key)
-  if (!tagExists) {
-    const labelMap = {
-      dashboard: '仪表盘',
-      'user-management': '首页',
-      'coin-management': '收入管理',
-      'goods-management': '支出管理',
-      'budget-management': '购物预算管理',
-      'DataAnalysis-management': '消费年度总结',
-    }
-    pageTagsList.value.push({ key, label: labelMap[key] })
-  }
-  activePageKey.value = key
-}
-
-// 页面挂载时初始化
-onMounted(async () => {
-
-
-  // 初始化分类和支付方式映射
-  console.log('🔄 开始初始化支出页面数据...')
-
-  try {
-    // 并行初始化分类和支付方式映射
-    await Promise.all([
-      categoryMapper.init(),
-      paymentMapper.init()
-    ])
-
-    console.log('✅ 分类和支付方式映射初始化成功')
-    console.log('📊 支出分类数量:', categoryMapper.expenseCategories.length)
-    console.log('📋 支出分类列表:', categoryMapper.expenseCategories)
-    console.log('🗺️ 支出映射Map大小:', categoryMapper.expenseMap.size)
-    console.log('🗺️ 支出映射内容:', Array.from(categoryMapper.expenseMap.entries()))
-
-    // 获取分类和支付方式列表（用于下拉框）
-    expenseCategoryList.value = categoryMapper.expenseCategories
-    paymentMethodList.value = paymentMapper.getPaymentMethodList()
-
-    console.log('📝 下拉框分类列表:', expenseCategoryList.value)
-    console.log('💳 下拉框支付方式列表:', paymentMethodList.value)
-
-    initYearOptions() // 初始化年份选择器
-
-    // 初始化支出数据（从后端加载）
-    await initExpenseData()
-
-    console.log('✅ 支出页面数据初始化完成')
-  } catch (error) {
-    console.error('❌ 支出数据初始化失败:', error)
-    ElMessage.error('数据加载失败，请刷新页面重试')
-  }
-})
-
-// ========== 搜索逻辑 ==========
-const handleSearch = () => {
-  console.log('搜索条件：', searchForm.value)
-  // 重置页码
-  currentPage.value = 1
-  // 设置为搜索状态
-  isSearching.value = true
-
-  // 从原始数据拷贝，而非筛选后的数据
-  let filteredData = JSON.parse(JSON.stringify(originExpenseList.value))
-
-  // 1.  ========== 动态日期筛选逻辑 ==========
-  if (searchForm.value.dateType && searchForm.value.dateValue) {
-    const dateType = searchForm.value.dateType
-    const dateValue = searchForm.value.dateValue
-
-    switch (dateType) {
-      case 'day':
-        // 按日筛选
-        filteredData = filteredData.filter((item) => item.time === dateValue)
-        break
-
-      case 'month':
-        // 按月筛选
-        filteredData = filteredData.filter((item) => {
-          return item.time.startsWith(dateValue) // YYYY-MM 开头
-        })
-        break
-
-      case 'year':
-        // 按年筛选
-        filteredData = filteredData.filter((item) => {
-          return item.time.startsWith(dateValue) // YYYY 开头
-        })
-        break
-    }
-  }
-
-  // 2. 消费种类筛选
-  if (searchForm.value.type) {
-    filteredData = filteredData.filter((item) => item.type === searchForm.value.type)
-  }
-
-  // 3. 支付方式筛选
-  if (searchForm.value.paymentMethod) {
-    filteredData = filteredData.filter((item) => item.paymentMethod === searchForm.value.paymentMethod)
-  }
-
-  // 4. 消费金额筛选（精确匹配）
-  if (searchForm.value.amount) {
-    const targetAmount = Number(searchForm.value.amount)
-    filteredData = filteredData.filter(
-      (item) => Math.abs(Number(item.money) - targetAmount) < 0.01,
-    )
-  }
-
-  // 5. 消费名称筛选（模糊匹配）
-  if (searchForm.value.name) {
-    const keyword = searchForm.value.name.trim()
-    filteredData = filteredData.filter((item) => item.name.includes(keyword))
-  }
-
-  // 6. 备注筛选（模糊匹配）
-  if (searchForm.value.remark) {
-    const keyword = searchForm.value.remark.trim().toLowerCase()
-
-    // 如果用户搜索"无"，则查找备注为空或为"无"的记录
-    if (keyword === '无') {
-      filteredData = filteredData.filter((item) => {
-        const remarkValue = item.extra || ''
-        return remarkValue === '' || remarkValue === '无'
-      })
-    } else {
-      // 普通模糊匹配（大小写不敏感）
-      filteredData = filteredData.filter((item) => {
-        const remarkValue = (item.extra || '').toLowerCase()
-        return remarkValue.includes(keyword)
-      })
-    }
-  }
-
-  // 搜索结果按日期降序排列
-  const sortedFilteredData = sortDataByDate(filteredData)
-
-  // 更新筛选后的数据
-  expenseList.value = sortedFilteredData
-  totalExpense.value = sortedFilteredData.length
-}
-
-// ========== 重置搜索 ==========
-const resetSearch = async () => {
-  searchForm.value = {
-    date: '',
-    type: '',
-    paymentMethod: '',
-    amount: '',
-    name: '',
-    remark: '',
-  }
-
-  // 清除搜索状态
-  isSearching.value = false
-  currentPage.value = 1
-
-  // 重新从后端加载数据
-  await initExpenseData()
-}
-
-// 保留原有onSearch/onReset方法（兼容表单提交）
-const onSearch = handleSearch
-const onReset = resetSearch
-
-// 搜索表单验证函数
-const validateSearchInput = (field, fieldName) => {
-  console.log(`验证搜索字段: ${fieldName}(${field}) = "${searchForm.value[field]}"`)
-
-  const value = searchForm.value[field]
-
-  // 如果是字符串且只包含空格
-  if (typeof value === 'string' && value.trim() === '') {
-    ElMessage.warning({
-      message: `${fieldName}不能只输入空格，已自动清空`,
-      duration: 2000,
-      showClose: true
-    })
-    searchForm.value[field] = ''  // 清空搜索表单的字段
-  }
-}
-
-// 自动修剪首尾空格（当输入框失去焦点时）
-const trimInputValue = (row, field) => {
-  if (!row[field]) return;
-
-  const originalValue = row[field];
-  const trimmedValue = originalValue.trim();
-
-  // 如果修剪前后不同（说明有首尾空格）
-  if (originalValue !== trimmedValue) {
-    row[field] = trimmedValue;
-
-    // 轻微提示（可选）
-    if (trimmedValue === '') {
-      ElMessage.warning(`${field === 'name' ? '消费名称' : '备注'}已清除多余空格`);
-    }
-  }
+const handleMenuSelect = (_key) => {
+  // no-op
 }
 </script>
 

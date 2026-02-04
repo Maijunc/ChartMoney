@@ -5,8 +5,16 @@
       <div class="logo">MyFinancePal</div>
       <div class="breadcrumb">仪表盘 / 收入管理</div>
       <div class="tags-container"></div>
-      <div class="user-info">
-        <el-avatar>
+      <div class="user-info" style="display: flex; align-items: center; gap: 10px">
+        <template v-if="userStore?.isLogin">
+          <span style="font-size: 14px; color: #606266">{{ userStore.username }}</span>
+        </template>
+        <el-avatar
+          :size="32"
+          :src="userStore?.avatar || ''"
+          style="cursor: pointer"
+          @click="handleAvatarClick"
+        >
           <el-icon><User /></el-icon>
         </el-avatar>
       </div>
@@ -73,19 +81,7 @@
       <!-- 右侧内容区 -->
       <div class="content-panel">
         <!-- 标签页导航 -->
-        <div class="page-tags" style="padding-top: 10px">
-          <el-tag
-            v-for="(tag, index) in pageTagsList"
-            :key="tag.key"
-            :closable="tag.key !== 'dashboard'"
-            @close="handleClosePageTag(index)"
-            @click="handlePageTagClick(tag.key)"
-            :effect="activePageKey === tag.key ? 'dark' : 'light'"
-            class="page-tag-item"
-          >
-            {{ tag.label }}
-          </el-tag>
-        </div>
+        <PageTagsNav :paddingTop="10" />
 
         <div class="menu-management-panel">
           <!-- ========== 新增：收入管理主体内容 ========== -->
@@ -426,12 +422,21 @@ import { getBillList, addBill, updateBill, deleteBill, batchDeleteBill, BillTran
 import { CategoryMapper } from '@/api/category'
 import { PaymentMethodMapper } from '@/api/payment'
 import { useUserStore } from '@/stores/user'
+import PageTagsNav from '@/components/PageTagsNav.vue'
 
 // 路由跳转逻辑
 const router = useRouter()
 
 // ==========  获取用户信息 ==========
 const userStore = useUserStore()
+
+const handleAvatarClick = () => {
+  if (userStore.isLogin) {
+    router.push('/settings')
+  } else {
+    router.push('/login')
+  }
+}
 
 // ========== 初始化映射器 ==========
 const categoryMapper = new CategoryMapper()
@@ -492,75 +497,10 @@ onMounted(async () => {
   }
 })
 
-// 顶部标签页数据（修复activePath初始值匹配）
-const tagsList = ref([
-  { key: 'dashboard', label: '仪表盘' },
-  { key: 'user', label: '首页' },
-  { key: 'coin', label: '收入管理' },
-  { key: 'Goods', label: '支出管理' },
-  { key: 'Tickets', label: '购物预算管理' },
-  { key: 'DataAnalysis', label: '消费年度总结' },
-  { key: 'Tools', label: '设置' },
-])
-const activePath = ref('dashboard') // 修复：匹配标签页key，而非path
 
-// 页面内标签页数据（修复key匹配）
-const pageTagsList = ref([
-  { key: 'dashboard', label: '仪表盘' },
-  { key: 'user', label: '首页' },
-  { key: 'coin', label: '收入管理' },
-  { key: 'Goods', label: '支出管理' },
-  { key: 'Tickets', label: '购物预算管理' },
-  { key: 'DataAnalysis', label: '消费年度总结' },
-])
-const activePageKey = ref('dashboard') // 修复：初始值匹配标签页key
-
-// 顶部标签页-关闭（修复判断key而非path）
-const handleCloseTag = (index) => {
-  const closedTag = tagsList.value[index]
-  tagsList.value.splice(index, 1)
-  if (closedTag?.key === activePath.value) {
-    activePath.value = tagsList.value[tagsList.value.length - 1]?.key || 'dashboard'
-  }
-}
-
-// 顶部标签页-点击切换
-const handleTagClick = (key) => {
-  activePath.value = key
-}
-
-// 页面内标签页-关闭
-const handleClosePageTag = (index) => {
-  const closedTag = pageTagsList.value[index]
-  pageTagsList.value.splice(index, 1)
-  if (closedTag?.key === activePageKey.value) {
-    activePageKey.value = pageTagsList.value[pageTagsList.value.length - 1]?.key || 'dashboard'
-  }
-}
-
-// 页面内标签页-点击切换
-const handlePageTagClick = (key) => {
-  activePageKey.value = key
-}
-
-// 左侧菜单选择（修复labelMap匹配）
-const handleMenuSelect = (key) => {
-  const tagExists = pageTagsList.value.some((item) => item.key === key)
-  if (!tagExists) {
-    const labelMap = {
-      dashboard: '仪表盘',
-      user: '首页',
-      coin: '收入管理',
-      Goods: '支出管理',
-      Tickets: '购物预算管理',
-      data: '消费年度总结',
-      tools: '设置',
-      CreditCard: '总消费记录',
-      DailyExpense: '日常支出',
-    }
-    pageTagsList.value.push({ key, label: labelMap[key] || key })
-  }
-  activePageKey.value = key
+// 左侧菜单选择：不再维护页面内标签数组，标签页由全局 store 自动维护
+const handleMenuSelect = (_key) => {
+  // no-op
 }
 
 // 修复点8：搜索表单字段与模板匹配（删除冗余的min/maxAmount，新增date/source/remark/paymentMethod）
