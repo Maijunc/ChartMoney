@@ -371,7 +371,7 @@
                     <el-button type="primary" size="small" @click="handleEditExpense(scope.row)"
                       >编辑</el-button
                     >
-                    <el-button type="danger" size="small" @click="handleDeleteExpense(scope.row.id)"
+                    <el-button type="danger" size="small" @click="handleDeleteExpense(scope.row.bill_id)"
                       >删除</el-button
                     >
                   </template>
@@ -439,6 +439,27 @@ const isDataLoading = ref(false) // 数据加载状态
 // 动态加载的分类和支付方式列表
 const expenseCategoryList = ref([]) // 支出分类列表（用于下拉框）
 const paymentMethodList = ref([]) // 支付方式列表（用于下拉框）
+
+// ✅ 补上挂载初始化：ExpendView 之前缺少 onMounted，导致分类/支付方式/账单数据都不会初始化
+onMounted(async () => {
+  initYearOptions()
+  console.log('🔄 开始初始化支出页面数据...')
+
+  try {
+    await Promise.all([categoryMapper.init(), paymentMapper.init()])
+
+    // 下拉数据
+    expenseCategoryList.value = categoryMapper.expenseCategories
+    paymentMethodList.value = paymentMapper.getPaymentMethodList()
+
+    await initExpenseData()
+
+    console.log('✅ 支出页面数据初始化完成')
+  } catch (error) {
+    console.error('❌ 支出页面数据初始化失败:', error)
+    ElMessage.error('数据加载失败，请刷新页面重试')
+  }
+})
 
 const handleJumpToExpend = () => {
   router.push('/expend')
@@ -546,6 +567,13 @@ const initExpenseData = async () => {
     return
   }
 
+  // 登录态刚恢复时可能 userId 还没就绪，下一拍重试
+  if (!userStore.userId) {
+    console.warn('⚠️ userId 为空，稍后重试初始化支出数据')
+    setTimeout(() => initExpenseData().catch(() => {}), 0)
+    return
+  }
+
   try {
     isDataLoading.value = true
 
@@ -557,18 +585,19 @@ const initExpenseData = async () => {
       type: 2  // 2 = 支出
     })
 
-    if (res.code === 200 && res.data) {
+    if (res.code === 200 && Array.isArray(res.data)) {
       // 转换后端数据为前端格式
-      const convertedData = res.data.map(billData => {
+      const convertedData = res.data.map((billData, index) => {
         const categoryName = categoryMapper.getExpenseCategoryName(billData.category_id) || '其他'
         const paymentMethodName = paymentMapper.getPaymentMethodName(billData.method_id) || '未知'
 
         const expenseData = BillTransformer.backendToExpense(billData, categoryName)
 
-        // 添加前端需要的额外字段
+        // ✅ 关键：row_id（前端行）与 bill_id（后端账单）分离
         return {
           ...expenseData,
-          bill_id: billData.id,  // 保存账单ID用于修改和删除
+          row_id: expenseData.id ?? index + 1,
+          bill_id: billData.id,
           category_id: billData.category_id,
           method_id: billData.method_id,
           paymentMethod: paymentMethodName,
@@ -579,9 +608,18 @@ const initExpenseData = async () => {
       // 按日期降序排序
       const sortedData = sortDataByDate(convertedData)
 
+      // 分页越界处理
+      const total = Number(res.total ?? sortedData.length)
+      const maxPage = Math.max(1, Math.ceil(total / pageSize.value))
+      if (currentPage.value > maxPage) {
+        currentPage.value = 1
+        await initExpenseData()
+        return
+      }
+
       expenseList.value = sortedData
       originExpenseList.value = [...sortedData]
-      totalExpense.value = res.total || sortedData.length
+      totalExpense.value = total
 
       console.log('✅ 支出数据加载成功:', sortedData.length, '条')
     } else {
@@ -631,7 +669,9 @@ const loadMockExpenseData = () => {
     const formatDate = date.toISOString().split('T')[0]
 
     mockData.push({
+      row_id: i,
       id: i,
+      bill_id: null,
       time: formatDate,
       iconName: randomIcon,
       type: randomType,
@@ -651,237 +691,26 @@ const loadMockExpenseData = () => {
   totalExpense.value = sortedData.length
 }
 
-// ========== 新增：表格行内新增相关方法 ==========
-// 生成新ID（取当前最大ID+1）
-const getNewId = () => {
-  if (expenseList.value.length === 0) return 1
-  const maxId = Math.max(...expenseList.value.map((item) => item.id))
-  return maxId + 1
-}
-
-// 表格内新增空行
-const handleAddRow = () => {
-  const today = new Date()
-  const formatDate = today.toISOString().split('T')[0]
-
-  // 获取默认支付方式
-  const defaultPaymentMethod = paymentMethodList.value.length > 0
-    ? paymentMethodList.value[0].name
-    : ''
-  const defaultMethodId = paymentMapper.getDefaultPaymentMethodId() || 1
-
-  // 新增空行数据（匹配后端需要的字段）
-  const newRow = {
-    id: getNewId(),
-    time: formatDate,
-    iconName: 'Food',
-    type: '',
-    category_id: null,  // 后端需要的分类ID
-    name: '',
-    money: '',
-    paymentMethod: defaultPaymentMethod,  // 显示用的支付方式名称
-    method_id: defaultMethodId,  // 后端需要的支付方式ID
-    extra: '',
-    isEditing: true,
-  }
-
-  // 添加到列表头部（方便编辑）
-  expenseList.value.unshift(newRow)
-  originExpenseList.value.unshift(newRow)
-  totalExpense.value = expenseList.value.length
-}
-
-// 处理分类改变
-const handleCategoryChange = (row) => {
-  // 当用户选择分类时，自动设置 category_id
-  if (row.type) {
-    console.log('🔍 正在查找分类:', row.type)
-    console.log('📋 当前支出分类列表:', expenseCategoryList.value)
-    console.log('🗺️ 分类映射Map大小:', categoryMapper.expenseMap.size)
-    console.log('🗺️ 映射内容:', Array.from(categoryMapper.expenseMap.entries()))
-
-    // 尝试获取 category_id
-    const categoryId = categoryMapper.getExpenseCategoryId(row.type)
-
-    if (!categoryId) {
-      // 如果映射中找不到，尝试从列表中查找
-      const foundCategory = expenseCategoryList.value.find(cat => cat.name === row.type)
-      if (foundCategory) {
-        row.category_id = foundCategory.id
-        console.log('⚠️ 映射中未找到，从列表中获取:', row.type, '-> category_id:', row.category_id)
-
-        // 更新映射
-        categoryMapper.expenseMap.set(row.type, foundCategory.id)
-        categoryMapper.expenseIdMap.set(foundCategory.id, row.type)
-        console.log('✅ 已更新映射')
-      } else {
-        console.error('❌ 分类不存在:', row.type)
-        ElMessage.error(`分类"${row.type}"不存在，请刷新页面重试`)
-        row.category_id = null
-        return
-      }
-    } else {
-      row.category_id = categoryId
-    }
-
-    // 根据分类自动匹配图标
-    row.iconName = iconMap[row.type] || 'Food'
-
-    console.log('✅ 分类已选择:', row.type, '-> category_id:', row.category_id)
-  }
-}
-
-// 处理支付方式改变
-const handlePaymentChange = (row) => {
-  // 当用户选择支付方式时，自动设置 method_id
-  if (row.paymentMethod) {
-    row.method_id = paymentMapper.getPaymentMethodId(row.paymentMethod)
-    console.log('✅ 支付方式已选择:', row.paymentMethod, '-> method_id:', row.method_id)
-  }
-}
-
-// 保存编辑行（调用真实API）
-const handleSaveRow = async (row) => {
-  // 基础校验
-  if (!row.time) {
-    ElMessage.warning('请选择日期！')
-    return
-  }
-  if (!row.type) {
-    ElMessage.warning('请选择消费种类！')
-    return
-  }
-  if (!row.name) {
-    ElMessage.warning('请输入消费名称！')
-    return
-  }
-  if (!row.money || Number(row.money) <= 0) {
-    ElMessage.warning('请输入有效消费金额！')
-    return
-  }
-  if (!row.paymentMethod) {
-    ElMessage.warning('请选择支付方式！')
-    return
-  }
-
-  // 确保 category_id 和 method_id 已设置
-  if (!row.category_id) {
-    row.category_id = categoryMapper.getExpenseCategoryId(row.type)
-  }
-  if (!row.method_id) {
-    row.method_id = paymentMapper.getPaymentMethodId(row.paymentMethod)
-  }
-
-  // 最终校验：确保 ID 不为 null
-  if (!row.category_id) {
-    ElMessage.error('无法��取分类ID，请重新选择消费种类')
-    console.error('❌ category_id 为空:', { type: row.type, category_id: row.category_id })
-    return
-  }
-  if (!row.method_id) {
-    ElMessage.error('无法获取支付方式ID，请重新选择支付方式')
-    console.error('❌ method_id 为空:', { paymentMethod: row.paymentMethod, method_id: row.method_id })
-    return
-  }
-
-  // 调试日志：显示即将发送的数据
-  console.log('📤 准备保存账单:', {
-    user_id: userStore.userId,
-    category_id: row.category_id,
-    method_id: row.method_id,
-    name: row.name,
-    amount: Number(row.money),
-    type: row.type,
-    paymentMethod: row.paymentMethod
-  })
-
-  // 根据消费种类自动匹配图标
-  row.iconName = iconMap[row.type] || 'Food'
-  // 格式化金额（保留2位小数）
-  row.money = Number(row.money).toFixed(2)
-  // 备注默认填空字符串
-  row.extra = row.extra || ''
-
-  // 判断是新增还是修改（根据是否有 bill_id）
-  const isNew = !row.bill_id
-
-  try {
-    if (isNew) {
-      // 新增账单
-      await addBill({
-        user_id: userStore.userId,
-        category_id: row.category_id,
-        method_id: row.method_id,
-        name: row.name,
-        amount: Number(row.money),
-        bill_time: BillTransformer.formatDateTime(row.time),
-        remark: row.extra || ''
-      })
-      ElMessage.success('新增支出成功！')
-    } else {
-      // 修改账单
-      await updateBill({
-        user_id: userStore.userId,
-        bill_id: row.bill_id,
-        category_id: row.category_id,
-        method_id: row.method_id,
-        name: row.name,
-        amount: Number(row.money),
-        bill_time: BillTransformer.formatDateTime(row.time),
-        remark: row.extra || ''
-      })
-      ElMessage.success('修改支出成功！')
-    }
-
-    // 退出编辑状态
-    row.isEditing = false
-
-    // 重新加载数据
-    await initExpenseData()
-  } catch (error) {
-    console.error('保存失败:', error)
-    ElMessage.error('保存失败，请重试')
-  }
-}
-
-// 取消编辑行
-const handleCancelRow = (row) => {
-  // 如果是新增未保存的行（判断：金额为空）
-  if (!row.money) {
-    // 从列表中移除
-    expenseList.value = expenseList.value.filter((item) => item.id !== row.id)
-    originExpenseList.value = originExpenseList.value.filter((item) => item.id !== row.id)
-    totalExpense.value = expenseList.value.length
-  } else {
-    // 已有数据的行：退出编辑状态
-    row.isEditing = false
-  }
-}
-
-// 分页相关逻辑
+// 2. 分页相关（✅ ExpendView 之前缺失这组状态，模板和 initExpenseData 会直接 ReferenceError 导致页面无法加载）
 const currentPage = ref(1) // 当前页码
 const pageSize = ref(15) // 每页条数（默认15条）
-const selectedIds = ref([]) // 批量选择的支出ID
+const selectedIds = ref([]) // 批量选择的后端 bill_id 数组
 const isSearching = ref(false) // 搜索状态标志（区分正常浏览和搜索筛选）
 
-// 分页后的数据（智能分页）
+// 4. 分页后的数据（后端已返回当前页时直接用 expenseList；搜索时前端 slice）
 const pagedExpenseList = computed(() => {
-  // 如果是搜索/筛选状态，使用前端分页
   if (isSearching.value) {
     const start = (currentPage.value - 1) * pageSize.value
     const end = start + pageSize.value
     return expenseList.value.slice(start, end)
   }
-  // 正常情况下，直接显示后端返回的当前页数据
   return expenseList.value
 })
 
-// 分页事件处理（调用后端API重新加载数据）
+// 5. 分页事件处理（非搜索时请求后端重新加载）
 const handleSizeChange = async (val) => {
   pageSize.value = val
-  currentPage.value = 1 // 切换每页条数时重置页码
-
-  // 如果不是搜索状态，重新请求后端
+  currentPage.value = 1
   if (!isSearching.value) {
     await initExpenseData()
   }
@@ -889,8 +718,6 @@ const handleSizeChange = async (val) => {
 
 const handleCurrentChange = async (val) => {
   currentPage.value = val
-
-  // 如果不是搜索状态，重新请求后端
   if (!isSearching.value) {
     await initExpenseData()
   }
@@ -898,142 +725,157 @@ const handleCurrentChange = async (val) => {
 
 // 表格多选事件
 const handleSelectionChange = (val) => {
-  selectedIds.value = val.map((item) => item.id)
+  // ✅ 批量删除使用 bill_id；未保存的行没有 bill_id，过滤掉
+  selectedIds.value = val.map((item) => item.bill_id).filter((v) => !!v)
 }
 
-// ========== 新增：支出操作方法 ==========
-// 消费类型标签颜色映射
+// 备注：模板里会用到的交互方法必须在 setup 中定义，否则渲染期会直接报错并导致页面更新失败
+
+// 8. 标签类型映射（用于表格中消费种类的标签颜色）
 const getTagType = (type) => {
   const typeMap = {
-    餐饮美食: 'warning',
-    交通出行: 'primary',
+    餐饮美食: 'danger',
+    交通出行: 'warning',
     居住房租: 'info',
     购物消费: 'success',
-    休闲娱乐: 'danger',
-    医疗健康: 'default',
+    休闲娱乐: 'primary',
+    医疗健康: 'danger',
+    其他: 'info',
   }
-  return typeMap[type] || 'default'
+
+  if (!type) return ''
+  return typeMap[type] || ''
 }
 
-// 新增支出（原有弹窗式新增，保留）
-const handleAddExpense = () => {
-  ElMessage.info('新增支出功能待实现（推荐使用表格快速新增）')
-}
-
-// 编辑支出（改为行内编辑）
+// 编辑支出（行内编辑）
 const handleEditExpense = (row) => {
+  row._originalData = { ...row }
   row.isEditing = true
 }
 
-// 删除支出
-const handleDeleteExpense = (id) => {
-  ElMessageBox.confirm('此操作将永久删除该支出记录, 是否继续?', '提示', {
-    confirmButtonText: '确定',
-    cancelButtonText: '取消',
-    type: 'warning',
-  })
-    .then(async () => {
-      await deleteBill({
-          user_id: userStore.userId,
-          bill_id: id
-        })
-      ElMessage.success('删除成功！')
-      expenseList.value = expenseList.value.filter((item) => item.id !== id)
-      originExpenseList.value = originExpenseList.value.filter((item) => item.id !== id)
-      totalExpense.value = expenseList.value.length
-    })
-    .catch(() => {
-      ElMessage.info('已取消删除')
-    })
-}
+// 取消编辑行
+const handleCancelRow = (row) => {
+  // 新增未保存行：bill_id 为空，且关键字段（money/name/type）为空时直接移除
+  const isNewRow = !row.bill_id
+  const isEmpty = !row.money && !row.name && !row.type
 
-// 批量删除
-const handleBatchDelete = () => {
-  if (selectedIds.value.length === 0) {
-    ElMessage.warning('请选择要删除的记录')
+  if (isNewRow && isEmpty) {
+    const key = row.row_id || row.id
+    expenseList.value = expenseList.value.filter((item) => (item.row_id || item.id) !== key)
+    originExpenseList.value = originExpenseList.value.filter((item) => (item.row_id || item.id) !== key)
+    totalExpense.value = expenseList.value.length
     return
   }
 
-  ElMessageBox.confirm(`此操作将永久删除选中的 ${selectedIds.value.length} 条支出记录, 是否继续?`, '提示', {
-    confirmButtonText: '确定',
-    cancelButtonText: '取消',
-    type: 'warning',
-  })
-    .then(async () => {
-      try {
-        await batchDeleteBill({
-          user_id: userStore.userId,
-          bill_ids: selectedIds.value
-        })
-        ElMessage.success(`成功删除 ${selectedIds.value.length} 条记录！`)
-
-        // 清空选中项
-        selectedIds.value = []
-
-        // 重新加载数据
-        await initExpenseData()
-      } catch (error) {
-        console.error('批量删除失败:', error)
-        ElMessage.error('批量删除失败，请重试')
-      }
-    })
-    .catch(() => {
-      ElMessage.info('已取消删除')
-    })
+  // 否则退出编辑状态（可按需恢复原数据）
+  if (row._originalData) {
+    Object.assign(row, row._originalData)
+    delete row._originalData
+  }
+  row.isEditing = false
 }
 
-// 导出数据功能
-const handleExportExpense = () => {
-  // 1. 准备导出数据：深拷贝避免修改原数据
-  const exportData = JSON.parse(JSON.stringify(expenseList.value)).map((item) => {
-    // 过滤掉不需要的字段
-    const { isEditing, iconName, bill_id, category_id, method_id, ...rest } = item
-    // 重命名字段（让Excel表头更友好）
-    return {
-      序号: rest.id,
-      支出日期: rest.time,
-      消费种类: rest.type,
-      消费名称: rest.name,
-      '消费金额(¥)': Number(rest.money).toFixed(2),
-      支付方式: rest.paymentMethod || '未设置',
-      备注: rest.extra || '无',
+// 搜索表单验证函数
+const validateSearchInput = (field, fieldName) => {
+  const value = searchForm.value[field]
+  if (typeof value === 'string' && value.trim() === '') {
+    ElMessage.warning({
+      message: `${fieldName}不能只输入空格，已自动清空`,
+      duration: 2000,
+      showClose: true
+    })
+    searchForm.value[field] = ''
+  }
+}
+
+// 自动修剪首尾空格（当输入框失去焦点时）
+const trimInputValue = (row, field) => {
+  if (!row[field]) return
+  if (typeof row[field] !== 'string') return
+
+  const originalValue = row[field]
+  const trimmedValue = originalValue.trim()
+  if (originalValue !== trimmedValue) {
+    row[field] = trimmedValue
+  }
+}
+
+// 搜索/筛选（前端筛选 originExpenseList）
+const handleSearch = () => {
+  currentPage.value = 1
+  isSearching.value = true
+
+  let filteredData = JSON.parse(JSON.stringify(originExpenseList.value))
+
+  // 1) 动态日期筛选
+  if (searchForm.value.dateType && searchForm.value.dateValue) {
+    const { dateType, dateValue } = searchForm.value
+
+    if (dateType === 'day') {
+      filteredData = filteredData.filter((item) => item.time === dateValue)
+    } else if (dateType === 'month') {
+      filteredData = filteredData.filter((item) => (item.time || '').startsWith(dateValue))
+    } else if (dateType === 'year') {
+      filteredData = filteredData.filter((item) => (item.time || '').startsWith(dateValue))
     }
-  })
+  }
 
-  // 2. 创建工作簿和工作表
-  const ws = XLSX.utils.json_to_sheet(exportData)
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, '支出记录')
+  // 2) 消费种类
+  if (searchForm.value.type) {
+    filteredData = filteredData.filter((item) => item.type === searchForm.value.type)
+  }
 
-  // 3. 调整列宽（优化Excel显示）
-  const wscols = [
-    { wch: 8 }, // 序号
-    { wch: 15 }, // 支出日期
-    { wch: 12 }, // 消费种类
-    { wch: 15 }, // 消费名称
-    { wch: 15 }, // 消费金额
-    { wch: 12 }, // 支付方式
-    { wch: 25 }, // 备注
-  ]
-  ws['!cols'] = wscols
+  // 3) 支付方式
+  if (searchForm.value.paymentMethod) {
+    filteredData = filteredData.filter((item) => item.paymentMethod === searchForm.value.paymentMethod)
+  }
 
-  // 4. 生成文件名（带时间戳，避免重复）
-  const date = new Date()
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const filename = `支出记录_${year}${month}${day}.xlsx`
+  // 4) 金额（允许 money 为 string/number）
+  if (searchForm.value.amount) {
+    const target = Number(searchForm.value.amount)
+    filteredData = filteredData.filter((item) => Math.abs(Number(item.money) - target) < 0.01)
+  }
 
-  // 5. 导出文件
-  XLSX.writeFile(wb, filename)
+  // 5) 消费名称（模糊）
+  if (searchForm.value.name) {
+    const keyword = searchForm.value.name.trim()
+    filteredData = filteredData.filter((item) => (item.name || '').includes(keyword))
+  }
 
-  // 6. 提示用户
-  ElMessage.success('支出数据导出成功！')
+  // 6) 备注（模糊；"无" 特判）
+  if (searchForm.value.remark) {
+    const keyword = searchForm.value.remark.trim().toLowerCase()
+    if (keyword === '无') {
+      filteredData = filteredData.filter((item) => {
+        const v = item.extra || ''
+        return v === '' || v === '无'
+      })
+    } else {
+      filteredData = filteredData.filter((item) => ((item.extra || '').toLowerCase()).includes(keyword))
+    }
+  }
+
+  const sorted = sortDataByDate(filteredData)
+  expenseList.value = sorted
+  totalExpense.value = sorted.length
 }
 
-// 左侧菜单选择
-const handleMenuSelect = (_key) => {
-  // no-op
+// 重置搜索
+const resetSearch = async () => {
+  searchForm.value = {
+    dateType: '',
+    dateValue: '',
+    type: '',
+    paymentMethod: '',
+    amount: '',
+    name: '',
+    remark: '',
+  }
+
+  isSearching.value = false
+  currentPage.value = 1
+
+  await initExpenseData()
 }
 </script>
 
