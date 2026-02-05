@@ -98,10 +98,29 @@ def user_login(user: schemas.User, db: Session = Depends(database.get_db)):
 
 
 # 绑定手机号发送验证码(登录注册)
-@app.post('/user/send_verify_code_rl')
-def send_verify_code_rl(phone: schemas.User_phone):
+@app.post('/user/send_verify_code')
+def send_verify_code(phone: schemas.User_phone):
+    '''
+    注册/登录时phone.type=1
+    更新手机时phone.type=2
+    修改密码时phone.type=3
+    绑定新手机时phone.type=4(这个不知道用的上，感觉和更新手机是一个意思)
+    验证手机时phone.type=5
+    '''
+    if phone.type == 1:
+        code = settings.alibabacloud_sms_template_code_rl
+    elif phone.type == 2:
+        code = settings.alibabacloud_sms_template_code_update
+    elif phone.type == 3:
+        code = settings.alibabacloud_sms_template_code_update_password
+    elif phone.type == 4:
+        code = settings.alibabacloud_sms_template_code_verify_new
+    elif phone.type == 5:
+        code = settings.alibabacloud_sms_template_code_verify_phone
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='类型参数输入错误')
     try:
-        send_sms(phone_number=phone.phone, code=settings.alibabacloud_sms_template_code_rl)
+        send_sms(phone_number=phone.phone, code=code)
         return {
             "code": status.HTTP_200_OK,
             "message": "验证码发送成功"
@@ -110,7 +129,7 @@ def send_verify_code_rl(phone: schemas.User_phone):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="验证码发送失败")
     
 
-# 绑定手机号验证验证码
+# 手机号验证验证码
 @app.post('/user/verify_code')
 def verify_code(phone_code: schemas.User_phone_code):
     try:

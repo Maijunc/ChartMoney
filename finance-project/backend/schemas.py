@@ -18,6 +18,7 @@ class User(BaseModel):
 # 手机获取验证码
 class User_phone(BaseModel):
     phone: str = Field(..., min_length=11, max_length=11, pattern=r"^1\d{10}$")
+    type: int = Field(..., ge=1, le=5)  # 用于指定发送验证码的模板，可以区分是登录还是注册
 
 
 # 手机验证验证码
