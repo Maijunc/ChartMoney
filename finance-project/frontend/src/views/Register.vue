@@ -28,14 +28,66 @@
           />
         </el-form-item>
 
+        <!-- 手机号输入区域 -->
         <el-form-item prop="phone">
-          <el-input
-            v-model="registerForm.phone"
-            placeholder="请输入手机号（11位）"
-            prefix-icon="Phone"
-            size="large"
-            maxlength="11"
-          />
+          <div class="phone-input-container">
+            <el-input
+              v-model="registerForm.phone"
+              placeholder="请输入手机号（11位）"
+              prefix-icon="Phone"
+              size="large"
+              maxlength="11"
+              :disabled="phoneVerified"
+            />
+            <el-button
+              type="primary"
+              :disabled="sendCodeDisabled"
+              :loading="sendingCode"
+              @click="handleSendCode"
+              class="send-code-btn"
+            >
+              {{ sendCodeText }}
+            </el-button>
+          </div>
+        </el-form-item>
+
+        <!-- 验证码输入区域 -->
+        <el-form-item v-if="showVerificationCode" prop="verificationCode">
+          <div class="verification-code-container">
+            <el-input
+              v-model="registerForm.verificationCode"
+              placeholder="请输入4位验证码"
+              prefix-icon="Message"
+              size="large"
+              maxlength="4"
+              :disabled="phoneVerified"
+            />
+            <el-button
+              type="success"
+              :disabled="verifyCodeDisabled"
+              :loading="verifyingCode"
+              @click="handleVerifyCode"
+              class="verify-code-btn"
+            >
+              验证
+            </el-button>
+          </div>
+          <div v-if="countdown > 0" class="countdown-text">
+            验证码已发送，{{ countdown }}秒后可重新获取
+          </div>
+          <div v-else-if="showVerificationCode" class="hint-text">
+            请查收短信验证码
+          </div>
+        </el-form-item>
+
+        <!-- 手机验证状态显示 -->
+        <el-form-item v-if="phoneVerified">
+          <div class="verified-info">
+            <el-icon color="success" style="margin-right: 8px;">
+              <Check />
+            </el-icon>
+            <span>手机号已验证</span>
+          </div>
         </el-form-item>
 
         <el-form-item prop="password">
@@ -73,9 +125,10 @@
             size="large"
             class="register-btn"
             :loading="registerLoading"
+            :disabled="!phoneVerified"
             @click="handleRegister"
           >
-            注册
+            {{ phoneVerified ? '注册' : '请先验证手机号' }}
           </el-button>
         </el-form-item>
 
@@ -89,10 +142,12 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
+import { Check } from '@element-plus/icons-vue'
+import { sendVerifyCode, verifyCode} from '@/api/verification'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -101,10 +156,38 @@ const userStore = useUserStore()
 const registerFormRef = ref(null)
 const registerForm = reactive({
   username: '',
-  phone: '',  // 改为 phone，匹配后端字段（仅支持手机号）
+  phone: '',
   password: '',
   confirmPassword: '',
+  verificationCode: '',
   agreement: false,
+})
+
+// 状态管理
+const showVerificationCode = ref(false)
+const phoneVerified = ref(false)
+const sendingCode = ref(false)
+const verifyingCode = ref(false)
+const countdown = ref(0)
+const countdownTimer = ref(null)
+
+// 计算属性
+const sendCodeDisabled = computed(() => {
+  return !registerForm.phone || !/^1[3-9]\d{9}$/.test(registerForm.phone) || 
+         phoneVerified.value || countdown.value > 0
+})
+
+const verifyCodeDisabled = computed(() => {
+  return !registerForm.verificationCode || 
+         registerForm.verificationCode.length !== 4 || 
+         phoneVerified.value
+})
+
+const sendCodeText = computed(() => {
+  if (countdown.value > 0) {
+    return `${countdown.value}秒后重发`
+  }
+  return '发送验证码'
 })
 
 // 注册验证规则
@@ -116,8 +199,33 @@ const registerRules = reactive({
   phone: [
     { required: true, message: '请输入手机号', trigger: 'blur' },
     {
-      pattern: /^1[3-9]\d{9}$/,
-      message: '请输入有效的11位手机号',
+      validator: (rule, value, callback) => {
+        if (!value) {
+          callback(new Error('请输入手机号'))
+        } else if (!/^1[3-9]\d{9}$/.test(value)) {
+          callback(new Error('请输入有效的11位手机号'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'blur',
+    },
+  ],
+  verificationCode: [
+    {
+      validator: (rule, value, callback) => {
+        if (showVerificationCode.value && !phoneVerified.value) {
+          if (!value) {
+            callback(new Error('请输入验证码'))
+          } else if (value.length !== 4) {
+            callback(new Error('验证码为4位数字'))
+          } else {
+            callback()
+          }
+        } else {
+          callback()
+        }
+      },
       trigger: 'blur',
     },
   ],
@@ -152,22 +260,113 @@ const registerRules = reactive({
   ],
 })
 
-// 注册状态
-const registerLoading = ref(false)
+// 发送验证码
+const handleSendCode = async () => {
+  try {
+    // 验证手机号格式
+    if (!/^1[3-9]\d{9}$/.test(registerForm.phone)) {
+      ElMessage.error('请输入有效的手机号')
+      return
+    }
+
+    sendingCode.value = true
+    
+    // 调用后端发送验证码API
+    // 注意：sendVerifyCode函数需要一个对象参数，包含phone和type
+    const response = await sendVerifyCode({
+      phone: registerForm.phone,
+      type: 1  // 1表示注册登录类型
+    })
+    
+    // 发送成功，移除setTimeout模拟延迟
+    sendingCode.value = false
+    showVerificationCode.value = true
+    startCountdown(60)
+    
+    if (response && response.data && response.data.message) {
+      ElMessage.success(response.data.message)
+    } else {
+      ElMessage.success('验证码已发送，请查收短信')
+    }
+    
+  } catch (error) {
+    sendingCode.value = false
+    console.error('发送验证码失败:', error)
+  }
+}
+
+// 验证验证码
+const handleVerifyCode = async () => {
+  try {
+    // 验证验证码格式
+    if (!registerForm.verificationCode || registerForm.verificationCode.length !== 4) {
+      ElMessage.error('请输入4位验证码')
+      return
+    }
+
+    verifyingCode.value = true
+    
+    // 调用后端验证验证码API
+    // 注意：verifyCode函数需要一个对象参数 {phone, verify_code}
+    const response = await verifyCode({
+      phone: registerForm.phone,
+      verify_code: registerForm.verificationCode
+    })
+    
+    // 移除setTimeout模拟延迟
+    verifyingCode.value = false
+    
+    // 验证成功 - HTTP状态码200会直接到这里
+    phoneVerified.value = true
+    ElMessage.success('手机号验证成功')
+    
+    // 清除倒计时
+    clearCountdown()
+    
+  } catch (error) {
+    verifyingCode.value = false
+    console.error('验证码验证失败:', error)
+  }
+}
+
+// 开始倒计时
+const startCountdown = (seconds) => {
+  countdown.value = seconds
+  countdownTimer.value = setInterval(() => {
+    countdown.value--
+    if (countdown.value <= 0) {
+      clearCountdown()
+    }
+  }, 1000)
+}
+
+// 清除倒计时
+const clearCountdown = () => {
+  if (countdownTimer.value) {
+    clearInterval(countdownTimer.value)
+    countdownTimer.value = null
+  }
+}
 
 // 处理注册
 const handleRegister = async () => {
   try {
-    // 表单验证
+    // 验证表单
     await registerFormRef.value.validate()
+    
+    // 确保手机号已验证
+    if (!phoneVerified.value) {
+      ElMessage.error('请先验证手机号')
+      return
+    }
 
     registerLoading.value = true
 
-    // 调用真实的注册 API
+    // 调用注册API
     const success = await userStore.register({
       username: registerForm.username,
       phone: registerForm.phone,
-      password: registerForm.password
+      password: registerForm.password,
     })
 
     if (success) {
@@ -176,6 +375,7 @@ const handleRegister = async () => {
     }
   } catch (error) {
     console.error('注册失败:', error)
+    ElMessage.error('注册失败，请检查输入信息')
   } finally {
     registerLoading.value = false
   }
@@ -185,6 +385,14 @@ const handleRegister = async () => {
 const handleGoToLogin = () => {
   router.push('/login')
 }
+
+// 组件卸载时清除定时器
+onUnmounted(() => {
+  clearCountdown()
+})
+
+// 注册状态
+const registerLoading = ref(false)
 </script>
 
 <style scoped>
@@ -212,7 +420,7 @@ const handleGoToLogin = () => {
 }
 
 .register-card {
-  width: 450px;
+  width: 480px;
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(149, 157, 165, 0.1);
@@ -247,16 +455,64 @@ const handleGoToLogin = () => {
   margin-bottom: 20px;
 }
 
-.captcha-container {
+/* 手机号输入容器 */
+.phone-input-container {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.send-code-btn {
+  width: 120px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* 验证码输入容器 */
+.verification-code-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.verify-code-btn {
+  width: 80px;
+  flex-shrink: 0;
+}
+
+/* 倒计时提示 */
+.countdown-text {
+  font-size: 12px;
+  color: #67c23a;
+  margin-top: 8px;
+}
+
+.hint-text {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 8px;
+}
+
+/* 已验证信息 */
+.verified-info {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: #f0f9ff;
+  border-radius: 4px;
+  border: 1px solid #409eff;
+  color: #409eff;
 }
 
 .register-btn {
   width: 100%;
   height: 44px;
   font-size: 16px;
+}
+
+.register-btn:disabled {
+  background-color: #c0c4cc;
+  border-color: #c0c4cc;
 }
 
 .login-link {
@@ -275,5 +531,11 @@ const handleGoToLogin = () => {
 
 :deep(.el-link) {
   font-size: 14px;
+}
+
+/* 禁用状态样式 */
+:deep(.el-input.is-disabled .el-input__wrapper) {
+  background-color: #f5f7fa;
+  cursor: not-allowed;
 }
 </style>
