@@ -28,7 +28,8 @@ class User(Base):   # 用户表的模型类
     id: Mapped[int] = mapped_column(type_=BigInteger ,primary_key=True, comment="用户id", autoincrement=True)
     username: Mapped[str] = mapped_column(type_=String(20), comment="用户名", nullable=False, unique=True)
     password: Mapped[str] = mapped_column(type_=String(255), comment="用户密码（bcrypt加密后60字符）", nullable=False)
-    phone: Mapped[str] = mapped_column(type_=String(11), comment="电话号码", nullable=False, unique=True)
+    # 手机号改为可选：用户可以先不绑定手机号，后续在设置页绑定
+    phone: Mapped[str] = mapped_column(type_=String(11), comment="电话号码", nullable=True, unique=True)
     email: Mapped[str] = mapped_column(type_=String(40), comment="邮箱", nullable=True, unique=True)
     nickname: Mapped[str] = mapped_column(type_=String(60), comment="昵称", nullable=True, default="用户")
     signature: Mapped[str] = mapped_column(

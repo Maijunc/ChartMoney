@@ -160,13 +160,13 @@
                       />
                     </el-form-item>
                     <el-form-item label="昵称">
-                      <el-input v-model="profileForm.nickname" placeholder="请输入昵称" />
+                      <el-input v-model="profileForm.nickname" placeholder="请输入昵称" :disabled="!isProfileEditing" />
                     </el-form-item>
                     <el-form-item label="邮箱">
-                      <el-input v-model="profileForm.email" placeholder="请输入邮箱" />
+                      <el-input v-model="profileForm.email" placeholder="请输入邮箱" :disabled="!isProfileEditing" />
                     </el-form-item>
                     <el-form-item label="手机号">
-                      <el-input v-model="profileForm.phone" placeholder="请输入手机号" />
+                      <el-input v-model="profileForm.phone" placeholder="请先在【账户安全】中绑定手机号" disabled />
                     </el-form-item>
                     <el-form-item label="个性签名">
                       <el-input
@@ -174,12 +174,20 @@
                         type="textarea"
                         :rows="3"
                         placeholder="请输入个性签名"
+                        :disabled="!isProfileEditing"
                       />
                     </el-form-item>
 
                     <el-form-item>
-                      <el-button type="primary" @click="saveProfile">保存修改</el-button>
-                      <el-button @click="resetProfileForm">取消</el-button>
+                      <template v-if="!isProfileEditing">
+                        <el-button type="primary" @click="startProfileEdit">编辑</el-button>
+                      </template>
+                      <template v-else>
+                        <el-button type="primary" :disabled="!hasProfileChanges" @click="saveProfile">
+                          保存修改
+                        </el-button>
+                        <el-button @click="cancelProfileEdit">取消</el-button>
+                      </template>
                     </el-form-item>
                   </el-form>
                 </div>
@@ -187,6 +195,53 @@
 
               <el-tab-pane label="账户安全" name="security">
                 <div class="security-settings">
+                  <!-- ✅ 新增：绑定手机号（验证码） -->
+                  <el-card style="margin-bottom: 15px">
+                    <template #header>
+                      <div style="display: flex; align-items: center; justify-content: space-between">
+                        <span>绑定手机号</span>
+                        <el-tag v-if="userStore.phone" type="success">已绑定</el-tag>
+                        <el-tag v-else type="info">未绑定</el-tag>
+                      </div>
+                    </template>
+
+                    <el-form :model="bindPhoneForm" label-width="100px">
+                      <el-form-item label="手机号">
+                        <el-input v-model="bindPhoneForm.phone" placeholder="请输入手机号" maxlength="11" />
+                      </el-form-item>
+
+                      <el-form-item label="验证码">
+                        <div style="display: flex; gap: 10px; width: 100%">
+                          <el-input
+                            v-model="bindPhoneForm.verify_code"
+                            placeholder="请输入验证码"
+                            maxlength="6"
+                            style="flex: 1"
+                          />
+                          <el-button
+                            type="primary"
+                            :disabled="sendCodeLoading || countdown > 0"
+                            :loading="sendCodeLoading"
+                            @click="handleSendBindPhoneCode"
+                            style="width: 140px"
+                          >
+                            {{ countdown > 0 ? `${countdown}s后重试` : '发送验证码' }}
+                          </el-button>
+                        </div>
+                      </el-form-item>
+
+                      <el-form-item>
+                        <el-button type="success" :loading="bindPhoneLoading" @click="handleBindPhone">
+                          验证并绑定
+                        </el-button>
+                      </el-form-item>
+                    </el-form>
+
+                    <div style="font-size: 12px; color: #999; margin-top: 8px">
+                      提示：绑定手机号将用于账户安全验证与找回。
+                    </div>
+                  </el-card>
+
                   <el-card
                     v-for="(item, index) in securityItems"
                     :key="index"
@@ -335,7 +390,7 @@
 
 <script setup>
 // 修复导入顺序，先导入所有依赖
-import { ref, onMounted, reactive } from 'vue'
+import { ref, onMounted, reactive, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user.js'
@@ -348,13 +403,10 @@ import {
   Goods,
   Tickets,
   DataAnalysis,
-  Tools,
-  Download,
-  Upload,
-  Delete,
-  SwitchButton
+  Tools
 } from '@element-plus/icons-vue'
 import PageTagsNav from '@/components/PageTagsNav.vue'
+import { sendVerifyCode, verifyCode } from '@/api'
 
 // 路由跳转逻辑
 const router = useRouter()
@@ -418,7 +470,7 @@ onMounted(() => {
 })
 
 // 左侧菜单选择：不再维护页面内标签数组，标签页由全局 store 自动维护
-const handleMenuSelect = (_key) => {
+const handleMenuSelect = () => {
   // no-op
 }
 
@@ -439,6 +491,46 @@ const profileForm = reactive({
   avatar: '',
 })
 
+// 记录“个人信息”初始值，用于判断是否有改动
+const originalProfileSnapshot = ref({
+  avatar: ''
+})
+
+// ========== 个人信息：编辑模式（先点编辑，再保存/取消） ==========
+const isProfileEditing = ref(false)
+
+const startProfileEdit = () => {
+  // 进入编辑态时记录快照，用于取消恢复
+  originalProfileSnapshot.value = {
+    avatar: profileForm.avatar || '',
+    nickname: profileForm.nickname || '',
+    email: profileForm.email || '',
+    signature: profileForm.signature || ''
+  }
+  isProfileEditing.value = true
+}
+
+const cancelProfileEdit = () => {
+  // 恢复快照
+  profileForm.avatar = originalProfileSnapshot.value.avatar || ''
+  profileForm.nickname = originalProfileSnapshot.value.nickname || ''
+  profileForm.email = originalProfileSnapshot.value.email || ''
+  profileForm.signature = originalProfileSnapshot.value.signature || ''
+
+  isProfileEditing.value = false
+  ElMessage.info('已取消修改')
+}
+
+const hasProfileChanges = computed(() => {
+  if (!isProfileEditing.value) return false
+  return (
+    (profileForm.avatar || '') !== (originalProfileSnapshot.value.avatar || '') ||
+    (profileForm.nickname || '') !== (originalProfileSnapshot.value.nickname || '') ||
+    (profileForm.email || '') !== (originalProfileSnapshot.value.email || '') ||
+    (profileForm.signature || '') !== (originalProfileSnapshot.value.signature || '')
+  )
+})
+
 // 加载用户信息
 const loadUserInfo = async () => {
   try {
@@ -455,10 +547,17 @@ const loadUserInfo = async () => {
     profileForm.username = userStore.username || ''
     profileForm.phone = userStore.phone || ''
     profileForm.avatar = userStore.avatar || ''
-    // 昵称、邮箱、签名暂时使用默认值（后端schema需要扩展）
-    profileForm.nickname = userStore.username || ''
-    profileForm.email = ''
-    profileForm.signature = '合理规划，智慧消费'
+    profileForm.nickname = userStore.nickname || (userStore.username || '')
+    profileForm.email = userStore.email || ''
+    profileForm.signature = userStore.signature || '合理规划，智慧消费'
+
+    // ✅ 初始化快照（用于“保存/取消”按钮的可用性判断）
+    originalProfileSnapshot.value = {
+      avatar: profileForm.avatar || '',
+      nickname: profileForm.nickname || '',
+      email: profileForm.email || '',
+      signature: profileForm.signature || ''
+    }
 
     // 如果需要最新数据，可以调用API刷新
     try {
@@ -468,13 +567,27 @@ const loadUserInfo = async () => {
         profileForm.username = userData.username || profileForm.username
         profileForm.phone = userData.phone || profileForm.phone
         profileForm.avatar = userData.avatar || profileForm.avatar
+        profileForm.nickname = userData.nickname || profileForm.nickname
+        profileForm.email = userData.email || profileForm.email
+        profileForm.signature = userData.signature || profileForm.signature
 
         // 同步更新userStore
         userStore.setUserInfo({
           username: userData.username,
           phone: userData.phone,
-          avatar: userData.avatar
+          avatar: userData.avatar,
+          nickname: userData.nickname,
+          email: userData.email,
+          signature: userData.signature
         })
+
+        // ✅ 如果后端返回了最新信息，同步更新快照
+        originalProfileSnapshot.value = {
+          avatar: profileForm.avatar || '',
+          nickname: profileForm.nickname || '',
+          email: profileForm.email || '',
+          signature: profileForm.signature || ''
+        }
       }
     } catch (apiError) {
       console.warn('API获取用户信息失败，使用缓存数据:', apiError)
@@ -488,25 +601,45 @@ const loadUserInfo = async () => {
 // 保存个人信息
 const saveProfile = async () => {
   try {
-    // 验证必填字段
-    if (!profileForm.phone || profileForm.phone.length !== 11) {
-      ElMessage.warning('请输入正确的手机号')
+    if (!hasProfileChanges.value) {
+      ElMessage.info('暂无需要保存的修改')
       return
     }
 
+    // 将个人信息（除手机号）提交到后端
     const response = await updateUserInfo({
-      phone: profileForm.phone,
-      avatar: profileForm.avatar
+      avatar: profileForm.avatar,
+      nickname: profileForm.nickname,
+      email: profileForm.email,
+      signature: profileForm.signature
     })
 
     if (response.code === 200) {
       ElMessage.success('个人信息保存成功！')
 
-      // 同步更新userStore（关键：确保整个应用中的头像一致）
+      // 使用后端返回值回写（避免前端与后端不一致）
+      const data = response.data || {}
+      profileForm.avatar = data.avatar ?? profileForm.avatar
+      profileForm.nickname = data.nickname ?? profileForm.nickname
+      profileForm.email = data.email ?? profileForm.email
+      profileForm.signature = data.signature ?? profileForm.signature
+
+      // 同步更新 userStore（头像会影响全局右上角显示）
       userStore.setUserInfo({
-        phone: profileForm.phone,
-        avatar: profileForm.avatar
+        avatar: profileForm.avatar,
+        phone: data.phone ?? userStore.phone,
+        nickname: profileForm.nickname,
+        email: profileForm.email,
+        signature: profileForm.signature,
+        // username 不变
       })
+
+      // 保存成功后刷新快照并退出编辑态
+      originalProfileSnapshot.value.avatar = profileForm.avatar || ''
+      originalProfileSnapshot.value.nickname = profileForm.nickname || ''
+      originalProfileSnapshot.value.email = profileForm.email || ''
+      originalProfileSnapshot.value.signature = profileForm.signature || ''
+      isProfileEditing.value = false
     } else {
       ElMessage.error(response.message || '保存失败')
     }
@@ -516,12 +649,6 @@ const saveProfile = async () => {
   }
 }
 
-// 重置个人信息表单
-const resetProfileForm = () => {
-  loadUserInfo()
-  ElMessage.info('已重置为原始数据')
-}
-
 // 账户安全设置项
 const securityItems = ref([
   {
@@ -529,12 +656,6 @@ const securityItems = ref([
     desc: '当前密码强度：中，建议定期更换密码',
     buttonText: '修改',
     type: 'password',
-  },
-  {
-    title: '绑定手机号',
-    desc: '已绑定：138****8888',
-    buttonText: '更换',
-    type: 'phone',
   },
   {
     title: '邮箱验证',
@@ -573,8 +694,8 @@ const handleSecurityOperation = (type) => {
       break
     case 'loginProtect':
       ElMessage.success('登录保护已开启')
-      securityItems.value[4].desc = '已开启，异地登录需要验证'
-      securityItems.value[4].buttonText = '关闭'
+      securityItems.value[3].desc = '已开启，异地登录需要验证'
+      securityItems.value[3].buttonText = '关闭'
       break
     default:
       break
@@ -791,6 +912,99 @@ const handleAvatarSuccess = (response, uploadFile) => {
     ElMessage.info('头像预览成功（需要保存后生效）')
   }
 }
+
+// ========== 绑定手机号（短信验证码） ==========
+const bindPhoneForm = ref({
+  phone: '',
+  verify_code: ''
+})
+
+const sendCodeLoading = ref(false)
+const bindPhoneLoading = ref(false)
+const countdown = ref(0)
+let countdownTimer = null
+
+const isValidPhone = (phone) => {
+  return /^1\d{10}$/.test((phone || '').trim())
+}
+
+const startCountdown = (seconds = 60) => {
+  countdown.value = seconds
+  if (countdownTimer) clearInterval(countdownTimer)
+  countdownTimer = setInterval(() => {
+    countdown.value -= 1
+    if (countdown.value <= 0) {
+      clearInterval(countdownTimer)
+      countdownTimer = null
+    }
+  }, 1000)
+}
+
+const handleSendBindPhoneCode = async () => {
+  const phone = (bindPhoneForm.value.phone || '').trim()
+  if (!isValidPhone(phone)) {
+    ElMessage.warning('请输入正确的11位手机号')
+    return
+  }
+
+  try {
+    sendCodeLoading.value = true
+    await sendVerifyCode({ phone, type: 5 })
+    ElMessage.success('验证码已发送')
+    startCountdown(60)
+  } catch (e) {
+    // request.js 已统一提示，这里只兜底
+    console.error(e)
+  } finally {
+    sendCodeLoading.value = false
+  }
+}
+
+const handleBindPhone = async () => {
+  const phone = (bindPhoneForm.value.phone || '').trim()
+  const code = (bindPhoneForm.value.verify_code || '').trim()
+
+  if (!isValidPhone(phone)) {
+    ElMessage.warning('请输入正确的11位手机号')
+    return
+  }
+  if (!/^\d{4,6}$/.test(code)) {
+    ElMessage.warning('请输入正确的验证码')
+    return
+  }
+
+  try {
+    bindPhoneLoading.value = true
+
+    // 1) 先校验验证码
+    await verifyCode({ phone, verify_code: code })
+
+    // 2) 校验通过后绑定（更新用户信息）
+    const res = await updateUserInfo({ phone })
+
+    // 3) 同步 store（兼容不同后端返回结构）
+    userStore.phone = res?.data?.phone ?? phone
+    ElMessage.success('手机号绑定成功')
+
+    // 清理验证码
+    bindPhoneForm.value.verify_code = ''
+  } catch (e) {
+    console.error(e)
+  } finally {
+    bindPhoneLoading.value = false
+  }
+}
+
+onMounted(() => {
+  // 预填当前手机号
+  if (userStore.phone) {
+    bindPhoneForm.value.phone = userStore.phone
+  }
+})
+
+onUnmounted(() => {
+  if (countdownTimer) clearInterval(countdownTimer)
+})
 </script>
 
 <style scoped>

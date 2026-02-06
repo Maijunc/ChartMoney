@@ -97,6 +97,7 @@ def user_register(user: schemas.User_register, db: Session):
 #   - 失败：返回错误代码
 #     -1: 用户不存在
 #     -2: 手机号已被其他用户使用
+#     -3: 邮箱已被其他用户使用
 #     0: 数据库异常
 def user_update(user_id: int, user_data: schemas.User_update, db: Session):
     # 查找用户
@@ -113,12 +114,25 @@ def user_update(user_id: int, user_data: schemas.User_update, db: Session):
         if existing_user:
             return -2  # 手机号已被其他用户使用
 
+    # 如果要更新邮箱，检查邮箱是否已被其他用户使用
+    if user_data.email:
+        stmt = select(User).where(User.email == user_data.email, User.id != user_id)
+        existing_user = db.scalar(stmt)
+        if existing_user:
+            return -3  # 邮箱已被其他用户使用
+
     # 更新用户信息
     try:
         if user_data.phone:
             user.phone = user_data.phone
         if user_data.avatar is not None:  # 允许设置为空字符串
             user.avatar = user_data.avatar
+        if user_data.nickname is not None:
+            user.nickname = user_data.nickname
+        if user_data.email is not None:
+            user.email = user_data.email
+        if user_data.signature is not None:
+            user.signature = user_data.signature
 
         db.commit()
         db.refresh(user)
@@ -1233,3 +1247,4 @@ def get_propotion_month(user_id: int, month: int, db: Session):
 
     # 7. 返回结构化的结果
     return period_description, category_data
+

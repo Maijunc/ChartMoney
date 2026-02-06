@@ -40,6 +40,9 @@ class User_register(BaseModel):
 class User_update(BaseModel):
     phone: str = Field(None, min_length=11, max_length=11, pattern=r"^1\d{10}$")
     avatar: str = Field(None, max_length=255)
+    nickname: Optional[str] = Field(None, min_length=1, max_length=60)
+    email: Optional[str] = Field(None, max_length=40)
+    signature: Optional[str] = Field(None, max_length=255)
 
 
 # 用于创建账单分类

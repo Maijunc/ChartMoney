@@ -24,5 +24,8 @@ export * from './user'
 // 分析统计相关
 export * from './analysis'
 
+// 手机号验证码相关
+export * from './verification'
+
 // 导出 request 实例（用于自定义请求）
 export { default as request } from './request'

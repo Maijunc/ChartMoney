@@ -62,8 +62,11 @@ def get_current_user_info(current_user: models.User = Depends(get_current_user))
         "data": {
             "user_id": current_user.id,
             "username": current_user.username,
-            "phone": current_user.phone,
-            "avatar": current_user.avatar if current_user.avatar else ""
+            "phone": current_user.phone or "",
+            "avatar": current_user.avatar if current_user.avatar else "",
+            "nickname": current_user.nickname or "",
+            "email": current_user.email or "",
+            "signature": current_user.signature or "",
         }
     }
 
@@ -186,14 +189,19 @@ def update_user(user_data: schemas.User_update, db: Session = Depends(database.g
             "data": {
                 "user_id": result.id,
                 "username": result.username,
-                "phone": result.phone,
-                "avatar": result.avatar if result.avatar else ""
+                "phone": result.phone or "",
+                "avatar": result.avatar if result.avatar else "",
+                "nickname": result.nickname or "",
+                "email": result.email or "",
+                "signature": result.signature or ""
             }
         }
     elif result == -1:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
     elif result == -2:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="该手机号已被其他用户使用")
+    elif result == -3:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="该邮箱已被其他用户使用")
     elif result == 0:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="更新用户信息时发生异常错误")
 

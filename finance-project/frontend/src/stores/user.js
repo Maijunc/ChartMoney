@@ -13,6 +13,9 @@ export const useUserStore = defineStore('user', () => {
   const username = ref('')
   const phone = ref('')
   const avatar = ref('')
+  const nickname = ref('')
+  const email = ref('')
+  const signature = ref('')
   const token = ref('')
   const isLogin = computed(() => !!userId.value)
 
@@ -24,6 +27,9 @@ export const useUserStore = defineStore('user', () => {
     const storedUsername = localStorage.getItem('username')
     const storedPhone = localStorage.getItem('phone')
     const storedAvatar = localStorage.getItem('avatar')
+    const storedNickname = localStorage.getItem('nickname')
+    const storedEmail = localStorage.getItem('email')
+    const storedSignature = localStorage.getItem('signature')
     const storedToken = localStorage.getItem('token')
 
     if (storedUserId) {
@@ -31,6 +37,9 @@ export const useUserStore = defineStore('user', () => {
       username.value = storedUsername || ''
       phone.value = storedPhone || ''
       avatar.value = storedAvatar || ''
+      nickname.value = storedNickname || ''
+      email.value = storedEmail || ''
+      signature.value = storedSignature || ''
       token.value = storedToken || ''
       console.log('✅ 用户信息已从缓存恢复:', { userId: userId.value, username: username.value })
     }
@@ -44,6 +53,9 @@ export const useUserStore = defineStore('user', () => {
     localStorage.setItem('username', username.value)
     localStorage.setItem('phone', phone.value)
     localStorage.setItem('avatar', avatar.value)
+    localStorage.setItem('nickname', nickname.value)
+    localStorage.setItem('email', email.value)
+    localStorage.setItem('signature', signature.value)
     localStorage.setItem('token', token.value)
   }
 
@@ -66,6 +78,9 @@ export const useUserStore = defineStore('user', () => {
         username.value = res.data.username
         phone.value = res.data.phone || ''
         avatar.value = res.data.avatar || ''
+        nickname.value = res.data.nickname || ''
+        email.value = res.data.email || ''
+        signature.value = res.data.signature || ''
         token.value = res.data.token  // ✅ 保存 JWT Token
 
         saveUserInfo()
@@ -107,8 +122,9 @@ export const useUserStore = defineStore('user', () => {
         username.value = res.data.username
         phone.value = res.data.phone || ''
         avatar.value = res.data.avatar || ''
-        // 注意：注册接口目前不返回 Token，需要再次登录
-        // 如果需要注册后自动登录，可以调用登录接口
+        nickname.value = res.data.nickname || ''
+        email.value = res.data.email || ''
+        signature.value = res.data.signature || ''
 
         saveUserInfo()
 
@@ -130,6 +146,9 @@ export const useUserStore = defineStore('user', () => {
     username.value = ''
     phone.value = ''
     avatar.value = ''
+    nickname.value = ''
+    email.value = ''
+    signature.value = ''
     token.value = ''
 
     apiLogout()
@@ -146,8 +165,11 @@ export const useUserStore = defineStore('user', () => {
     if (userInfo.id) userId.value = userInfo.id
     if (userInfo.user_id) userId.value = userInfo.user_id
     if (userInfo.username) username.value = userInfo.username
-    if (userInfo.phone) phone.value = userInfo.phone
-    if (userInfo.avatar) avatar.value = userInfo.avatar
+    if (userInfo.phone !== undefined) phone.value = userInfo.phone || ''
+    if (userInfo.avatar !== undefined) avatar.value = userInfo.avatar || ''
+    if (userInfo.nickname !== undefined) nickname.value = userInfo.nickname || ''
+    if (userInfo.email !== undefined) email.value = userInfo.email || ''
+    if (userInfo.signature !== undefined) signature.value = userInfo.signature || ''
     if (userInfo.token) token.value = userInfo.token
 
     saveUserInfo()
@@ -162,6 +184,9 @@ export const useUserStore = defineStore('user', () => {
     username,
     phone,
     avatar,
+    nickname,
+    email,
+    signature,
     token,
     isLogin,
 
