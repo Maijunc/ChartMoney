@@ -72,13 +72,13 @@ const router = createRouter({
       path: '/register', //访问路径
       name: 'register',
       component: Register,
-      meta: { title: '注册页面' },
+      meta: { title: '注册页面', noTag: true },
     },
     {
       path: '/login', //访问路径
       name: 'login',
       component: Login,
-      meta: { title: '登录页面' },
+      meta: { title: '登录页面', noTag: true },
     },
     {
     path: '/api-test',
@@ -98,6 +98,9 @@ router.beforeEach((to) => {
 
 // 路由后置：同步“标签页导航”状态
 router.afterEach((to) => {
+  // 不需要出现在标签页中的页面（例如登录/注册）
+  if (to?.meta?.noTag) return
+
   // Pinia store 需要在 app.use(pinia) 之后才可用；afterEach 触发时一般已就绪
   try {
     const tags = useTagsViewStore()

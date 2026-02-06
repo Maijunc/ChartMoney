@@ -171,7 +171,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import AppTopNav from '@/components/AppTopNav.vue'
 import PageTagsNav from '@/components/PageTagsNav.vue'
 
 const router = useRouter()
