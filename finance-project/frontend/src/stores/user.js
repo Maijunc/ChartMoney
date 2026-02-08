@@ -5,6 +5,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { login as apiLogin, register as apiRegister, logout as apiLogout } from '../api/index.js'
+import { loginByPhone } from '../api/auth.js'
 import { ElMessage } from 'element-plus'
 
 export const useUserStore = defineStore('user', () => {
@@ -70,6 +71,48 @@ export const useUserStore = defineStore('user', () => {
       const res = await apiLogin({
         username: loginData.username,
         password: loginData.password
+      })
+
+      if (res.code === 200 && res.data) {
+        // ✅ 保存后端返回的用户信息和 Token
+        userId.value = res.data.user_id
+        username.value = res.data.username
+        phone.value = res.data.phone || ''
+        avatar.value = res.data.avatar || ''
+        nickname.value = res.data.nickname || ''
+        email.value = res.data.email || ''
+        signature.value = res.data.signature || ''
+        token.value = res.data.token  // ✅ 保存 JWT Token
+
+        saveUserInfo()
+
+        console.log('✅ 登录成功，Token 已保存:', {
+          userId: userId.value,
+          username: username.value,
+          tokenPreview: token.value.substring(0, 20) + '...'
+        })
+
+        ElMessage.success('登录成功！')
+        return true
+      }
+      return false
+    } catch (error) {
+      console.error('登录失败:', error)
+      return false
+    }
+  }
+
+  /**
+   * 手机号登录
+   * @param {Object} loginData
+   * @param {string} loginData.phone - 手机号
+   * @param {string} loginData.code - 验证码
+   */
+  async function login_by_phone(loginData) {
+    try {
+      const res = await loginByPhone({
+        phone: loginData.phone,
+        verify_code: loginData.code
       })
 
       if (res.code === 200 && res.data) {
@@ -192,6 +235,7 @@ export const useUserStore = defineStore('user', () => {
 
     // 方法
     login,
+    login_by_phone,
     register,
     logout,
     setUserInfo,

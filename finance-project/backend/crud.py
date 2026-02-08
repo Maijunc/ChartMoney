@@ -57,6 +57,17 @@ def user_login(user: schemas.User, db: Session):
     return None
 
 
+def get_user_info_by_phone(phone: str, db: Session):
+    result = db.execute(select(User).where((User.phone == phone)))
+    select_user = result.scalar_one_or_none()
+
+    # 用户不存在
+    if select_user is None:
+        return None
+    
+    return select_user
+
+
 # 用于用户的注册
 # 返回值说明：
 #   - 成功：返回新创建的用户对象 (User)

@@ -76,3 +76,16 @@ export function updateUserInfo(data) {
   })
 }
 
+/**
+ * 校验短信验证码
+ * @param {Object} data
+ * @param {string} data.phone - 手机号
+ * @param {string} data.verify_code - 验证码
+ */
+export function loginByPhone(data) {
+  return request({
+    url: '/user/login_by_phone',
+    method: 'post',
+    data
+  })
+}

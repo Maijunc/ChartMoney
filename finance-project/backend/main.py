@@ -98,6 +98,37 @@ def user_login(user: schemas.User, db: Session = Depends(database.get_db)):
     else:
         # 统一返回"用户名或密码错误"，不区分是用户不存在还是密码错误（安全考虑）
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误")
+    
+
+# 用户通过手机号登录
+@app.post('/user/login_by_phone')
+def login_by_phone(phone: schemas.User_phone_code, db: Session = Depends(database.get_db)):
+    try:
+        verify_sms(phone_number=phone.phone, verify_code=phone.verify_code)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="验证码验证失败")
+    
+    result = crud.get_user_info_by_phone(phone.phone, db)
+    # result 现在是用户对象或 None
+    if result:
+        # 生成 JWT Token
+        access_token = security.create_access_token(
+            data={"user_id": result.id, "username": result.username}
+        )
+
+        return {
+            "code": status.HTTP_200_OK,
+            "message": "登录成功",
+            "data": {
+                "user_id": result.id,
+                "username": result.username,
+                "phone": result.phone,
+                "avatar": result.avatar if result.avatar else "",  # 头像可能为空
+                "token": access_token  # 返回 JWT Token
+            }
+        }
+    else:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="该手机号未注册")
 
 
 # 绑定手机号发送验证码(登录注册)
