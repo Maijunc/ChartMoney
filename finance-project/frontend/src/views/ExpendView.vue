@@ -410,6 +410,8 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import * as XLSX from 'xlsx'
+// 统一走后端导出
+import { exportUserData } from '@/api/user'
 // 导入API和工具类
 import { getBillList, addBill, updateBill, deleteBill, batchDeleteBill, BillTransformer } from '@/api/bill'
 import { CategoryMapper } from '@/api/category'
@@ -548,6 +550,20 @@ const iconMap = {
   购物消费: 'ShoppingTrolley',
   休闲娱乐: 'VideoPlay',
   医疗健康: 'FirstAidKit',
+}
+
+// 支出种类对应的 tag 样式
+const getTagType = (type) => {
+  const typeMap = {
+    '餐饮美食': 'danger',
+    '交通出行': 'warning',
+    '居住房租': 'info',
+    '购物消费': 'success',
+    '休闲娱乐': 'primary',
+    '医疗健康': 'danger',
+    '其他': 'info',
+  }
+  return typeMap[type] || 'info'
 }
 
 // ========== 新增：日期排序方法（核心修改） ==========
@@ -729,50 +745,169 @@ const handleSelectionChange = (val) => {
   selectedIds.value = val.map((item) => item.bill_id).filter((v) => !!v)
 }
 
-// 备注：模板里会用到的交互方法必须在 setup 中定义，否则渲染期会直接报错并导致页面更新失败
+// ========== 新增：行内新增/保存/删除相关 ==========
 
-// 8. 标签类型映射（用于表格中消费种类的标签颜色）
-const getTagType = (type) => {
-  const typeMap = {
-    餐饮美食: 'danger',
-    交通出行: 'warning',
-    居住房租: 'info',
-    购物消费: 'success',
-    休闲娱乐: 'primary',
-    医疗健康: 'danger',
-    其他: 'info',
+const getNewRowId = () => {
+  const ids = expenseList.value.map((x) => Number(x.row_id || x.id || 0)).filter((n) => !Number.isNaN(n))
+  return (ids.length ? Math.max(...ids) : 0) + 1
+}
+
+const handleAddRow = () => {
+  const today = new Date().toISOString().split('T')[0]
+
+  const defaultPaymentMethod = paymentMethodList.value.length > 0 ? paymentMethodList.value[0].name : ''
+  const defaultMethodId = defaultPaymentMethod ? paymentMapper.getPaymentMethodId(defaultPaymentMethod) : (paymentMapper.getDefaultPaymentMethodId?.() || 1)
+
+  const newRow = {
+    row_id: getNewRowId(),
+    id: getNewRowId(),
+    bill_id: null,
+    time: today,
+    type: '',
+    category_id: null,
+    name: '',
+    money: '',
+    paymentMethod: defaultPaymentMethod,
+    method_id: defaultMethodId,
+    extra: '',
+    iconName: 'Food',
+    isEditing: true,
   }
 
-  if (!type) return ''
-  return typeMap[type] || ''
+  expenseList.value.unshift(newRow)
+  originExpenseList.value.unshift(newRow)
+  totalExpense.value = expenseList.value.length
+  currentPage.value = 1
 }
 
-// 编辑支出（行内编辑）
-const handleEditExpense = (row) => {
-  row._originalData = { ...row }
-  row.isEditing = true
+const handleCategoryChange = (row) => {
+  if (!row?.type) return
+  row.category_id = categoryMapper.getExpenseCategoryId(row.type)
+  row.iconName = iconMap[row.type] || row.iconName || 'Food'
 }
 
-// 取消编辑行
-const handleCancelRow = (row) => {
-  // 新增未保存行：bill_id 为空，且关键字段（money/name/type）为空时直接移除
-  const isNewRow = !row.bill_id
-  const isEmpty = !row.money && !row.name && !row.type
+const handlePaymentChange = (row) => {
+  if (!row?.paymentMethod) return
+  row.method_id = paymentMapper.getPaymentMethodId(row.paymentMethod)
+}
 
-  if (isNewRow && isEmpty) {
-    const key = row.row_id || row.id
-    expenseList.value = expenseList.value.filter((item) => (item.row_id || item.id) !== key)
-    originExpenseList.value = originExpenseList.value.filter((item) => (item.row_id || item.id) !== key)
-    totalExpense.value = expenseList.value.length
+const handleSaveRow = async (row) => {
+  if (!userStore.isLogin) {
+    ElMessage.warning('请先登录')
     return
   }
 
-  // 否则退出编辑状态（可按需恢复原数据）
-  if (row._originalData) {
-    Object.assign(row, row._originalData)
-    delete row._originalData
+  if (!row.time) {
+    ElMessage.warning('请选择日期！')
+    return
   }
-  row.isEditing = false
+  if (!row.type) {
+    ElMessage.warning('请选择消费种类！')
+    return
+  }
+  if (!row.name) {
+    ElMessage.warning('请输入消费名称！')
+    return
+  }
+  if (!row.money || Number(row.money) <= 0) {
+    ElMessage.warning('请输入有效消费金额！')
+    return
+  }
+  if (!row.paymentMethod) {
+    ElMessage.warning('请选择支付方式！')
+    return
+  }
+
+  // 确保 id 已同步
+  if (!row.category_id) row.category_id = categoryMapper.getExpenseCategoryId(row.type)
+  if (!row.method_id) row.method_id = paymentMapper.getPaymentMethodId(row.paymentMethod)
+
+  try {
+    const isNew = !row.bill_id
+    const payload = {
+      user_id: userStore.userId,
+      category_id: row.category_id,
+      method_id: row.method_id,
+      name: row.name,
+      amount: Number(Number(row.money).toFixed(2)),
+      bill_time: BillTransformer.formatDateTime(row.time),
+      remark: row.extra || ''
+    }
+
+    if (isNew) {
+      await addBill(payload)
+      ElMessage.success('新增支出成功！')
+    } else {
+      await updateBill({
+        ...payload,
+        bill_id: row.bill_id,
+      })
+      ElMessage.success('修改支出成功！')
+    }
+
+    row.isEditing = false
+    await initExpenseData()
+  } catch (error) {
+    console.error('保存支出失败:', error)
+    ElMessage.error('保存失败，请重试')
+  }
+}
+
+const handleDeleteExpense = async (billId) => {
+  if (!billId) {
+    ElMessage.warning('该行尚未保存，无法删除')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm('此操作将永久删除该支出记录, 是否继续?', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+
+    await deleteBill({
+      user_id: userStore.userId,
+      bill_id: billId,
+    })
+
+    ElMessage.success('删除成功！')
+    await initExpenseData()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除失败:', error)
+      ElMessage.error('删除失败，请重试')
+    }
+  }
+}
+
+const handleBatchDelete = async () => {
+  if (!selectedIds.value.length) {
+    ElMessage.warning('请选择要删除的记录')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(`此操作将永久删除选中的 ${selectedIds.value.length} 条支出记录, 是否继续?`, '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+
+    await batchDeleteBill({
+      user_id: userStore.userId,
+      bill_ids: selectedIds.value,
+    })
+
+    ElMessage.success(`成功删除 ${selectedIds.value.length} 条记录！`)
+    selectedIds.value = []
+    await initExpenseData()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('批量删除失败:', error)
+      ElMessage.error('批量删除失败，请重试')
+    }
+  }
 }
 
 // 搜索表单验证函数
@@ -877,6 +1012,52 @@ const resetSearch = async () => {
 
   await initExpenseData()
 }
+
+// 统一下载文件名解析（与设置页一致）
+const getDownloadFilename = (disposition, fallbackName) => {
+  if (!disposition) return fallbackName
+  const match = /filename=([^;]+)/i.exec(disposition)
+  if (!match) return fallbackName
+  return match[1].replace(/\"/g, '').trim() || fallbackName
+}
+
+// 支出页：导出数据（统一导出全量用户数据，字段由后端控制，包含支付方式等）
+const handleExportExpense = async () => {
+  try {
+    if (!userStore.isLogin) {
+      ElMessage.warning('请先登录')
+      return
+    }
+
+    ElMessage.info('开始导出数据，请稍候...')
+
+    const response = await exportUserData('xlsx')
+    const blob = response.data
+
+    const fallbackName = `finance_export_${new Date().toISOString().split('T')[0]}.xlsx`
+    const filename = getDownloadFilename(response.headers['content-disposition'], fallbackName)
+
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+
+    ElMessage.success('数据导出成功！文件已下载')
+  } catch (error) {
+    console.error('导出数据失败:', error)
+    ElMessage.error('数据导出失败，请稍后重试')
+  }
+}
+
+// 左侧菜单选择：不再维护页面内标签数组，标签页由全局 store 自动维护
+const handleMenuSelect = (_key) => {
+  // no-op
+}
+
 </script>
 
 <style scoped>

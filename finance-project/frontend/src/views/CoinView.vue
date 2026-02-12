@@ -415,8 +415,8 @@ import useDashboardLogic from '@/stores/dashboardLogic.js'
 // 修复点6：导入 ElMessage/ElMessageBox 组件
 import { ElMessage, ElMessageBox } from 'element-plus'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
-// 导入xlsx库用于导出Excel
-import * as XLSX from 'xlsx'
+// 移除前端本地 xlsx 导出，统一走后端 /user/export
+import { exportUserData } from '@/api/user'
 // ========== 导入API和工具类 ==========
 import { getBillList, addBill, updateBill, deleteBill, batchDeleteBill, BillTransformer } from '@/api/bill'
 import { CategoryMapper } from '@/api/category'
@@ -1056,53 +1056,45 @@ const handleBatchDelete = () => {
     })
 }
 
-// ========== 完善导出数据功能 ==========
-const handleExportIncome = () => {
-  // 1. 准备导出数据：深拷贝避免修改原数据
-  const exportData = JSON.parse(JSON.stringify(incomeList.value)).map((item) => {
-    // 过滤掉不需要的字段
-    const { isEditing, ...rest } = item
-    // 重命名字段（让Excel表头更友好）
-    return {
-      序号: rest.id,
-      收入日期: rest.date,
-      收入类型: rest.ctype,
-      '收入金额(¥)': Number(rest.amount).toFixed(2),
-      收入来源: rest.source,
-      备注: rest.remark || '无',
-    }
-  })
-
-  // 2. 创建工作簿和工作表
-  const ws = XLSX.utils.json_to_sheet(exportData)
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, '收入记录')
-
-  // 3. 调整列宽（可选，优化Excel显示）
-  const wscols = [
-    { wch: 8 }, // 序号
-    { wch: 15 }, // 收入日期
-    { wch: 12 }, // 收入类型
-    { wch: 15 }, // 收入金额
-    { wch: 20 }, // 收入来源
-    { wch: 25 }, // 备注
-  ]
-  ws['!cols'] = wscols
-
-  // 4. 生成文件名（带时间戳，避免重复）
-  const date = new Date()
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const filename = `收入记录_${year}${month}${day}.xlsx`
-
-  // 5. 导出文件
-  XLSX.writeFile(wb, filename)
-
-  // 6. 提示用户
-  ElMessage.success('收入数据导出成功！')
+// 统一下载文件名解析（与设置页一致）
+const getDownloadFilename = (disposition, fallbackName) => {
+  if (!disposition) return fallbackName
+  const match = /filename=([^;]+)/i.exec(disposition)
+  if (!match) return fallbackName
+  return match[1].replace(/\"/g, '').trim() || fallbackName
 }
-// ========== 导出功能结束 ==========
+
+// 收入页：导出数据（统一导出全量用户数据，字段由后端控制，包含支付方式等）
+const handleExportIncome = async () => {
+  try {
+    if (!userStore.isLogin) {
+      ElMessage.warning('请先登录')
+      return
+    }
+
+    ElMessage.info('开始导出数据，请稍候...')
+
+    const response = await exportUserData('xlsx')
+    const blob = response.data
+
+    const fallbackName = `finance_export_${new Date().toISOString().split('T')[0]}.xlsx`
+    const filename = getDownloadFilename(response.headers['content-disposition'], fallbackName)
+
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+
+    ElMessage.success('数据导出成功！文件已下载')
+  } catch (error) {
+    console.error('导出数据失败:', error)
+    ElMessage.error('数据导出失败，请稍后重试')
+  }
+}
 
 // 搜索表单验证函数
 const validateSearchInput = (field, fieldName) => {

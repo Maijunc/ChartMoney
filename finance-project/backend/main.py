@@ -823,7 +823,8 @@ async def import_user_data(
             continue
         try:
             if record_type == "user":
-                row_user_id = parse_int((row.get("user_id") or "").strip(), "user_id")
+                # Excel 单元格可能是 int/float，统一转字符串再 strip
+                row_user_id = parse_int(str(row.get("user_id") or "").strip(), "user_id")
                 if row_user_id and row_user_id != current_user.id:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="导入文件用户不匹配")
                 continue
