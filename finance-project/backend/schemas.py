@@ -100,7 +100,7 @@ class budget_add(BaseModel):
     user_id: int = Field(..., ge=1)
     category_id: Optional[int] = None  # 修复：允许为None（总预算时为None）
     is_total: bool
-    amount: float = Field(..., gt=0)
+    amount: float = Field(..., ge=0)
     month: str = Field(..., min_length=7, max_length=7)
 
 
