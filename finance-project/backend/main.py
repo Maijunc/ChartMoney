@@ -1,13 +1,14 @@
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from datetime import datetime, timedelta
 from fastapi import File, UploadFile
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import joinedload
+from contextlib import asynccontextmanager
 
 import database, models, schemas, crud, security
 from dependencies import get_current_user
@@ -23,15 +24,23 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-# 启动时自动在数据库建表 (C++思维：类似编译时链接)
-models.Base.metadata.create_all(bind=database.engine)  # 创建所有以Base类为基类的模型类的元数据
+async def init_db():
+    async with database.engine.begin() as conn:
+        await conn.run_sync(models.Base.metadata.create_all)
 
-app = FastAPI()
+# FastAPI 生命周期管理
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动时执行
+    await init_db()
+    yield
 
-# 允许前端跨域访问 (必配！)
+app = FastAPI(lifespan=lifespan)
+
+# 允许前端跨域访问
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 允许所有来源，实训可以用 *
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -49,7 +58,7 @@ def read_root():
 
 # 测试 Token 认证的受保护接口
 @app.get("/user/me")
-def get_current_user_info(current_user: models.User = Depends(get_current_user)):
+async def get_current_user_info(current_user: models.User = Depends(get_current_user)):
     """
     获取当前登录用户的信息（需要 Token）
 
@@ -73,9 +82,9 @@ def get_current_user_info(current_user: models.User = Depends(get_current_user))
 
 # 用户登录处理函数
 @app.post("/user/login")
-def user_login(user: schemas.User, db: Session = Depends(database.get_db)):
+async def user_login(user: schemas.User, db: AsyncSession = Depends(database.get_db)):
     # ↑Depends依赖注入的一定是可调用函数对象，且Depends必须在处理函数中使用才会有效
-    result = crud.user_login(user, db)
+    result = await crud.user_login(user, db)
 
     # result 现在是用户对象或 None
     if result:
@@ -102,13 +111,13 @@ def user_login(user: schemas.User, db: Session = Depends(database.get_db)):
 
 # 用户通过手机号登录
 @app.post('/user/login_by_phone')
-def login_by_phone(phone: schemas.User_phone_code, db: Session = Depends(database.get_db)):
+async def login_by_phone(phone: schemas.User_phone_code, db: AsyncSession = Depends(database.get_db)):
     try:
         verify_sms(phone_number=phone.phone, verify_code=phone.verify_code)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="验证码验证失败")
     
-    result = crud.get_user_info_by_phone(phone.phone, db)
+    result = await crud.get_user_info_by_phone(phone.phone, db)
     # result 现在是用户对象或 None
     if result:
         # 生成 JWT Token
@@ -133,7 +142,7 @@ def login_by_phone(phone: schemas.User_phone_code, db: Session = Depends(databas
 
 # 绑定手机号发送验证码(登录注册)
 @app.post('/user/send_verify_code')
-def send_verify_code(phone: schemas.User_phone):
+async def send_verify_code(phone: schemas.User_phone):
     '''
     注册/登录时phone.type=1
     更新手机时phone.type=2
@@ -165,7 +174,7 @@ def send_verify_code(phone: schemas.User_phone):
 
 # 手机号验证验证码
 @app.post('/user/verify_code')
-def verify_code(phone_code: schemas.User_phone_code):
+async def verify_code(phone_code: schemas.User_phone_code):
     try:
         verify_sms(phone_number=phone_code.phone, verify_code=phone_code.verify_code)
         return {
@@ -178,8 +187,8 @@ def verify_code(phone_code: schemas.User_phone_code):
 
 # 用户注册处理函数
 @app.post("/user/register")
-def user_register(user: schemas.User_register, db: Session = Depends(database.get_db)):
-    result = crud.user_register(user, db)
+async def user_register(user: schemas.User_register, db: AsyncSession = Depends(database.get_db)):
+    result = await crud.user_register(user, db)
 
     # result 现在是用户对象或错误代码
     # 判断是否为用户对象（成功的情况）
@@ -204,14 +213,14 @@ def user_register(user: schemas.User_register, db: Session = Depends(database.ge
 
 # 更新用户信息
 @app.put("/user/update")
-def update_user(user_data: schemas.User_update, db: Session = Depends(database.get_db), current_user: models.User = Depends(get_current_user)):
+async def update_user(user_data: schemas.User_update, db: AsyncSession = Depends(database.get_db), current_user: models.User = Depends(get_current_user)):
     """
     更新当前登录用户的信息（需要 Token）
 
     请求头需要包含：
     Authorization: Bearer <token>
     """
-    result = crud.user_update(current_user.id, user_data, db)
+    result = await crud.user_update(current_user.id, user_data, db)
 
     if isinstance(result, models.User):
         return {
@@ -289,11 +298,11 @@ async def upload_avatar(file: UploadFile = File(...), current_user: models.User 
 
 # 获取账单分类列表
 @app.get("/category/list")
-def bill_category_list(type: int, db: Session = Depends(database.get_db)):
+async def bill_category_list(type: int, db: AsyncSession = Depends(database.get_db)):
     if type not in [1, 2]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="type参数输入错误")
 
-    result = crud.category_list(type, db)
+    result = await crud.category_list(type, db)
     if result == 0:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
     else:
@@ -306,8 +315,8 @@ def bill_category_list(type: int, db: Session = Depends(database.get_db)):
 
 # 获取支付方式列表
 @app.get("/payment_method/list")
-def payment_method_list(db: Session = Depends(database.get_db)):
-    result = crud.payment_method_list(db)
+async def payment_method_list(db: AsyncSession = Depends(database.get_db)):
+    result = await crud.payment_method_list(db)
 
     if result == 0:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
@@ -321,8 +330,8 @@ def payment_method_list(db: Session = Depends(database.get_db)):
 
 # 创建订单
 @app.post("/bill/add")
-def bill_add(bill: schemas.bill_add, db: Session = Depends(database.get_db)):
-    result = crud.bill_add(bill, db)
+async def bill_add(bill: schemas.bill_add, db: AsyncSession = Depends(database.get_db)):
+    result = await crud.bill_add(bill, db)
 
     if result == 1:
         return {
@@ -341,8 +350,8 @@ def bill_add(bill: schemas.bill_add, db: Session = Depends(database.get_db)):
 
 # 修改订单
 @app.put("/bill/update")
-def bill_update(bill: schemas.bill_update, db: Session = Depends(database.get_db)):
-    result = crud.bill_update(bill, db)
+async def bill_update(bill: schemas.bill_update, db: AsyncSession = Depends(database.get_db)):
+    result = await crud.bill_update(bill, db)
 
     if result == 1:
         return {
@@ -365,8 +374,8 @@ def bill_update(bill: schemas.bill_update, db: Session = Depends(database.get_db
 
 # 删除账单
 @app.delete("/bill/delete")
-def bill_delete(bill: schemas.bill_delete, db: Session = Depends(database.get_db)):
-    result = crud.bill_delete(bill, db)
+async def bill_delete(bill: schemas.bill_delete, db: AsyncSession = Depends(database.get_db)):
+    result = await crud.bill_delete(bill, db)
 
     if result == 1:
         return {
@@ -385,8 +394,8 @@ def bill_delete(bill: schemas.bill_delete, db: Session = Depends(database.get_db
 
 # 批量删除账单
 @app.delete("/bill/batch-delete")
-def bill_batch_delete(payload: schemas.bill_batch_delete, db: Session = Depends(database.get_db)):
-    result = crud.bill_batch_delete(payload, db)
+async def bill_batch_delete(payload: schemas.bill_batch_delete, db: AsyncSession = Depends(database.get_db)):
+    result = await crud.bill_batch_delete(payload, db)
 
     # 成功：返回删除数量（兼容旧风格 code/message）
     if isinstance(result, int) and result > 0:
@@ -413,7 +422,7 @@ def bill_batch_delete(payload: schemas.bill_batch_delete, db: Session = Depends(
 
 # 获取账单列表
 @app.get("/bill/list")
-def bill_list(user_id: int, page:int, page_size: int, type: int, the_time: str = None, db: Session = Depends(database.get_db)):
+async def bill_list(user_id: int, page:int, page_size: int, type: int, the_time: str = None, db: AsyncSession = Depends(database.get_db)):
     if page_size <15:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="页面大小太小")
     if type not in [1, 2]:
@@ -431,7 +440,7 @@ def bill_list(user_id: int, page:int, page_size: int, type: int, the_time: str =
         except ValueError:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不正确的日期格式")
     
-    temp = crud.get_bill_count(user_id, the_time, page_size, type, db)
+    temp = await crud.get_bill_count(user_id, the_time, page_size, type, db)
     if temp == 0:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
     elif temp == -1:
@@ -450,7 +459,7 @@ def bill_list(user_id: int, page:int, page_size: int, type: int, the_time: str =
     if page < 1 or page > page_num:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="页号输入错误（为负数或是过大）")
 
-    result = crud.bill_list(user_id, the_time, page, page_size, type, db)
+    result = await crud.bill_list(user_id, the_time, page, page_size, type, db)
     if result == 0:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
     else:
@@ -465,7 +474,7 @@ def bill_list(user_id: int, page:int, page_size: int, type: int, the_time: str =
 
 # 获取账单列表(主要用于首页页面的数据获取，将分页逻辑去除掉)
 @app.get("/bill/list_first")
-def bill_list_first(user_id: int, type: int, the_time: str = None, db: Session = Depends(database.get_db)):
+async def bill_list_first(user_id: int, type: int, the_time: str = None, db: AsyncSession = Depends(database.get_db)):
     if type not in [1, 2]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="type参数输入错误")
 
@@ -480,7 +489,7 @@ def bill_list_first(user_id: int, type: int, the_time: str = None, db: Session =
         except ValueError:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不正确的日期格式")
 
-    result = crud.bill_list_first(user_id, the_time, type, db)
+    result = await crud.bill_list_first(user_id, the_time, type, db)
     if result == 0:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
     elif result == -1:
@@ -494,8 +503,8 @@ def bill_list_first(user_id: int, type: int, the_time: str = None, db: Session =
 
 # 用于添加预算
 @app.post("/budget/add")
-def budget_add(budget: schemas.budget_add, db: Session = Depends(database.get_db)):
-    result = crud.budget_add(budget, db)
+async def budget_add(budget: schemas.budget_add, db: AsyncSession = Depends(database.get_db)):
+    result = await crud.budget_add(budget, db)
 
     # 修复：检查是否返回了Budget对象（成功情况）
     if isinstance(result, models.Budget):
@@ -532,8 +541,8 @@ def budget_add(budget: schemas.budget_add, db: Session = Depends(database.get_db
 
 # 用于删除预算
 @app.delete("/budget/delete")
-def budget_delete(budget: schemas.budget_delete, db: Session = Depends(database.get_db)):
-    result = crud.budget_delete(budget, db)
+async def budget_delete(budget: schemas.budget_delete, db: AsyncSession = Depends(database.get_db)):
+    result = await crud.budget_delete(budget, db)
 
     if result == 1:
         return {
@@ -551,8 +560,8 @@ def budget_delete(budget: schemas.budget_delete, db: Session = Depends(database.
 
 
 @app.put("/budget/update")
-def budget_update(budget: schemas.budget_update, db: Session = Depends(database.get_db)):
-    result = crud.budget_update(budget, db)
+async def budget_update(budget: schemas.budget_update, db: AsyncSession = Depends(database.get_db)):
+    result = await crud.budget_update(budget, db)
 
     # 修复：检查是否返回了Budget对象（成功情况）
     if isinstance(result, models.Budget):
@@ -580,8 +589,8 @@ def budget_update(budget: schemas.budget_update, db: Session = Depends(database.
 
 
 @app.get("/budget/list_month")
-def budget_list_month(user_id: int, month: str, db: Session = Depends(database.get_db)):
-    result = crud.budget_list_month(user_id, month, db)
+async def budget_list_month(user_id: int, month: str, db: AsyncSession = Depends(database.get_db)):
+    result = await crud.budget_list_month(user_id, month, db)
 
     if result == 0:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
@@ -602,11 +611,11 @@ def budget_list_month(user_id: int, month: str, db: Session = Depends(database.g
 """
 # 消费趋势分析之获取近n天数据
 @app.get("/analysis/trend/days")
-def get_trend_days(user_id: int = Query(..., ge=1),
+async def get_trend_days(user_id: int = Query(..., ge=1),
                 days: int = Query(..., ge=7),
-                db: Session = Depends(database.get_db)
+                db: AsyncSession = Depends(database.get_db)
                 ):
-    result = crud.get_trend_days(user_id, days, db)
+    result = await crud.get_trend_days(user_id, days, db)
 
     if result == 0:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
@@ -627,11 +636,11 @@ def get_trend_days(user_id: int = Query(..., ge=1),
 
 # 消费趋势分析之获取近n个月的数据
 @app.get("/analysis/trend/months")
-def get_trend_months(user_id: int = Query(..., ge=1),
+async def get_trend_months(user_id: int = Query(..., ge=1),
                      months: int = Query(..., ge=3),
-                     db: Session = Depends(database.get_db)
+                     db: AsyncSession = Depends(database.get_db)
                      ):
-    result = crud.get_trend_months(user_id, months, db)
+    result = await crud.get_trend_months(user_id, months, db)
 
     if result == 0:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
@@ -652,10 +661,10 @@ def get_trend_months(user_id: int = Query(..., ge=1),
 
 # 可视化界面中的“近期账单”
 @app.get("/analysis/recent_bills")
-def get_recent_bill(user_id: int = Query(..., ge=1),
-                    db: Session = Depends(database.get_db)
+async def get_recent_bill(user_id: int = Query(..., ge=1),
+                    db: AsyncSession = Depends(database.get_db)
                     ):
-    result = crud.get_recent_bills(user_id, db)
+    result = await crud.get_recent_bills(user_id, db)
 
     if result == 0:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
@@ -671,11 +680,11 @@ def get_recent_bill(user_id: int = Query(..., ge=1),
 
 # 消费列别占比（单个月，month=-1时为全部，month=0时为当月，month=1时为上个月，以此类推，最多往前推12个月）
 @app.get("/analysis/expense_propotion_month")
-def get_propotion_month(user_id: int = Query(..., ge=1),
+async def get_propotion_month(user_id: int = Query(..., ge=1),
                         month: int = Query(..., ge=-1, le=11),
-                        db: Session = Depends(database.get_db)
+                        db: AsyncSession = Depends(database.get_db)
                         ):
-    result = crud.get_propotion_month(user_id, month, db)
+    result = await crud.get_propotion_month(user_id, month, db)
 
     if result == 0:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
@@ -693,23 +702,23 @@ def get_propotion_month(user_id: int = Query(..., ge=1),
 
 # 导出用户数据（CSV/Excel，需登录）
 @app.get("/user/export")
-def export_user_data(
+async def export_user_data(
     format: str = Query("csv", pattern="^(csv|xlsx)$"),
     current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(database.get_db),
+    db: AsyncSession = Depends(database.get_db),
 ):
     """
     导出用户的所有财务数据（CSV 或 Excel）
     """
     try:
-        bills = db.scalars(
+        bills = await db.scalars(
             select(models.Bill)
             .options(joinedload(models.Bill.bill_category), joinedload(models.Bill.payment_method))
             .where(models.Bill.user_id == current_user.id)
             .order_by(models.Bill.bill_time.desc())
         ).all()
 
-        budgets = db.scalars(
+        budgets = await db.scalars(
             select(models.Budget)
             .where(models.Budget.user_id == current_user.id)
         ).all()
@@ -758,7 +767,7 @@ async def import_user_data(
     file: UploadFile = File(...),
     strategy: str = Query("merge", pattern="^(merge|replace)$"),
     current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(database.get_db),
+    db: AsyncSession = Depends(database.get_db),
 ):
     """
     导入用户的财务数据（CSV 或 Excel），格式需与导出一致
@@ -811,8 +820,10 @@ async def import_user_data(
         print(f"导入解析失败: {e}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="导入文件解析失败")
 
-    category_ids = {c.id for c in db.scalars(select(models.Bill_Category)).all()}
-    method_ids = {m.id for m in db.scalars(select(models.Payment_Method)).all()}
+    category_result = await db.scalars(select(models.Bill_Category))
+    category_ids = {c.id for c in category_result.all()}
+    method_result = await db.scalars(select(models.Payment_Method))
+    method_ids = {m.id for m in method_result.all()}
 
     bills_to_add: list[models.Bill] = []
     budgets_to_add: list[models.Budget] = []
@@ -933,10 +944,10 @@ async def import_user_data(
 
     if strategy == "replace":
         try:
-            db.execute(delete(models.Bill).where(models.Bill.user_id == current_user.id))
-            db.execute(delete(models.Budget).where(models.Budget.user_id == current_user.id))
+            await db.execute(delete(models.Bill).where(models.Bill.user_id == current_user.id))
+            await db.execute(delete(models.Budget).where(models.Budget.user_id == current_user.id))
         except Exception as e:
-            db.rollback()
+            await db.rollback()
             print(f"清空旧数据失败: {e}")
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="清空旧数据失败")
 
@@ -945,7 +956,7 @@ async def import_user_data(
             db.add_all(bills_to_add)
         if budgets_to_add:
             db.add_all(budgets_to_add)
-        db.commit()
+        await db.commit()
         return {
             "code": status.HTTP_200_OK,
             "message": "数据导入成功",
@@ -955,14 +966,14 @@ async def import_user_data(
             },
         }
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         print(f"导入数据失败: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="导入数据时发生错误")
 
 
 # 清理过期数据
 @app.delete("/user/clear-expired")
-def clear_expired_data(payload: dict, db: Session = Depends(database.get_db)):
+async def clear_expired_data(payload: dict, db: AsyncSession = Depends(database.get_db)):
     """
     清理指定天数之前的账单数据
     """
@@ -973,7 +984,7 @@ def clear_expired_data(payload: dict, db: Session = Depends(database.get_db)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="user_id 不能为空")
 
     # 验证用户是否存在
-    result = db.execute(select(models.User).where(models.User.id == user_id))
+    result = await db.execute(select(models.User).where(models.User.id == user_id))
     user = result.scalar_one_or_none()
 
     if user is None:
@@ -988,10 +999,10 @@ def clear_expired_data(payload: dict, db: Session = Depends(database.get_db)):
             models.Bill.user_id == user_id,
             models.Bill.bill_time < cutoff_date
         )
-        result = db.execute(delete_stmt)
+        result = await db.execute(delete_stmt)
         deleted_count = getattr(result, "rowcount", 0)
 
-        db.commit()
+        await db.commit()
 
         return {
             "code": status.HTTP_200_OK,
@@ -999,14 +1010,14 @@ def clear_expired_data(payload: dict, db: Session = Depends(database.get_db)):
             "deleted_count": deleted_count
         }
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         print(f"清理过期数据失败: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="清理数据时发生错误")
 
 
 # 清空所有数据
 @app.delete("/user/clear-all")
-def clear_all_data(payload: dict, db: Session = Depends(database.get_db)):
+async def clear_all_data(payload: dict, db: AsyncSession = Depends(database.get_db)):
     """
     清空用户的所有账单和预算数据
     """
@@ -1016,7 +1027,7 @@ def clear_all_data(payload: dict, db: Session = Depends(database.get_db)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="user_id 不能为空")
 
     # 验证用户是否存在
-    result = db.execute(select(models.User).where(models.User.id == user_id))
+    result = await db.execute(select(models.User).where(models.User.id == user_id))
     user = result.scalar_one_or_none()
 
     if user is None:
@@ -1025,15 +1036,15 @@ def clear_all_data(payload: dict, db: Session = Depends(database.get_db)):
     try:
         # 删除所有账单
         bills_delete_stmt = delete(models.Bill).where(models.Bill.user_id == user_id)
-        bills_result = db.execute(bills_delete_stmt)
+        bills_result = await db.execute(bills_delete_stmt)
         bills_count = getattr(bills_result, "rowcount", 0)
 
         # 删除所有预算
         budgets_delete_stmt = delete(models.Budget).where(models.Budget.user_id == user_id)
-        budgets_result = db.execute(budgets_delete_stmt)
+        budgets_result = await db.execute(budgets_delete_stmt)
         budgets_count = getattr(budgets_result, "rowcount", 0)
 
-        db.commit()
+        await db.commit()
 
         return {
             "code": status.HTTP_200_OK,
@@ -1042,7 +1053,7 @@ def clear_all_data(payload: dict, db: Session = Depends(database.get_db)):
             "deleted_budgets": budgets_count
         }
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         print(f"清空数据失败: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="清空数据时发生错误")
 

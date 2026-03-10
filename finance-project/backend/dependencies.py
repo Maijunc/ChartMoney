@@ -5,7 +5,7 @@
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 import security
 import database
 from models import User
@@ -14,9 +14,9 @@ from models import User
 security_scheme = HTTPBearer()
 
 
-def get_current_user(
+async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
-    db: Session = Depends(database.get_db)
+    db: AsyncSession = Depends(database.get_db)
 ) -> User:
     """
     从请求头中获取 Token 并验证，返回当前登录用户
@@ -59,7 +59,7 @@ def get_current_user(
 
     # 从数据库查询用户
     from sqlalchemy import select
-    result = db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
 
     if user is None:

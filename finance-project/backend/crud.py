@@ -1,5 +1,5 @@
 from models import User, Bill_Category, Bill, Budget, Payment_Method
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, desc, func, delete
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -13,10 +13,10 @@ import security  # 导入安全工具模块
 
 # 用于用户登录时，查看用户名和密码是否正确
 # 返回值说明：
-#   - 成功：返回用户对象 (User)
+#   - 成功：返回用户对象
 #   - 失败：返回 None (用户不存在或密码错误)
-def user_login(user: schemas.User, db: Session):
-    result = db.execute(select(User).where((User.username == user.username)))
+async def user_login(user: schemas.User, db: AsyncSession):
+    result = await db.execute(select(User).where((User.username == user.username)))
     select_user = result.scalar_one_or_none()
 
     # 用户不存在
@@ -41,15 +41,15 @@ def user_login(user: schemas.User, db: Session):
 
                 hashed_password = security.hash_password(plain_password)
                 select_user.password = hashed_password
-                db.commit()
-                db.refresh(select_user)  # 刷新对象
+                await db.commit()
+                await db.refresh(select_user)  # 刷新对象
                 print(f"[安全升级] 用户 {user.username} 的密码已自动升级为加密存储")
             except Exception as e:
                 print(f"[警告] 密码升级失败: {e}")
                 print(f"  - 用户名: {user.username}")
                 print(f"  - 明文密码长度: {len(user.password)} 字符")
                 print(f"  - 明文密码字节数: {len(user.password.encode('utf-8'))} 字节")
-                db.rollback()
+                await db.rollback()
 
             return select_user  # 返回用户对象
 
@@ -57,14 +57,14 @@ def user_login(user: schemas.User, db: Session):
     return None
 
 
-def get_user_info_by_phone(phone: str, db: Session):
-    result = db.execute(select(User).where((User.phone == phone)))
+async def get_user_info_by_phone(phone: str, db: AsyncSession):
+    result = await db.execute(select(User).where((User.phone == phone)))
     select_user = result.scalar_one_or_none()
 
     # 用户不存在
     if select_user is None:
         return None
-    
+
     return select_user
 
 
@@ -75,13 +75,13 @@ def get_user_info_by_phone(phone: str, db: Session):
 #     -1: 用户名已存在
 #     -2: 手机号已注册
 #     0: 数据库异常
-def user_register(user: schemas.User_register, db: Session):
-    check = db.execute(select(User).where((User.username == user.username)))
+async def user_register(user: schemas.User_register, db: AsyncSession):
+    check = await db.execute(select(User).where((User.username == user.username)))
     check = check.scalar_one_or_none()
     if check is not None:
         return -1  # 用户名已存在
 
-    check = db.execute(select(User).where((User.phone == user.phone)))
+    check = await db.execute(select(User).where((User.phone == user.phone)))
     check = check.scalar_one_or_none()
     if check is not None:
         return -2  # 该手机号已被注册
@@ -94,11 +94,11 @@ def user_register(user: schemas.User_register, db: Session):
     # 添加到数据库中并提交事务
     try:
         db.add(new_user)  # 因为new_user是User模型类，所以add直接会将其添加到user表中
-        db.commit()
-        db.refresh(new_user)  # 刷新对象，获取数据库生成的 id
+        await db.commit()
+        await db.refresh(new_user)  # 刷新对象，获取数据库生成的 id
         return new_user  # 返回新创建的用户对象
     except Exception:
-        db.rollback()  # 回滚事务
+        await db.rollback()  # 回滚事务
         return 0
 
 
@@ -110,10 +110,10 @@ def user_register(user: schemas.User_register, db: Session):
 #     -2: 手机号已被其他用户使用
 #     -3: 邮箱已被其他用户使用
 #     0: 数据库异常
-def user_update(user_id: int, user_data: schemas.User_update, db: Session):
+async def user_update(user_id: int, user_data: schemas.User_update, db: AsyncSession):
     # 查找用户
     stmt = select(User).where(User.id == user_id)
-    user = db.scalar(stmt)
+    user = await db.scalar(stmt)
 
     if user is None:
         return -1  # 用户不存在
@@ -121,14 +121,14 @@ def user_update(user_id: int, user_data: schemas.User_update, db: Session):
     # 如果要更新手机号，检查手机号是否已被其他用户使用
     if user_data.phone:
         stmt = select(User).where(User.phone == user_data.phone, User.id != user_id)
-        existing_user = db.scalar(stmt)
+        existing_user = await db.scalar(stmt)
         if existing_user:
             return -2  # 手机号已被其他用户使用
 
     # 如果要更新邮箱，检查邮箱是否已被其他用户使用
     if user_data.email:
         stmt = select(User).where(User.email == user_data.email, User.id != user_id)
-        existing_user = db.scalar(stmt)
+        existing_user = await db.scalar(stmt)
         if existing_user:
             return -3  # 邮箱已被其他用户使用
 
@@ -145,19 +145,19 @@ def user_update(user_id: int, user_data: schemas.User_update, db: Session):
         if user_data.signature is not None:
             user.signature = user_data.signature
 
-        db.commit()
-        db.refresh(user)
+        await db.commit()
+        await db.refresh(user)
         return user
     except Exception as e:
         print(f"更新用户信息失败: {e}")
-        db.rollback()
+        await db.rollback()
         return 0
 
 
 # # 用于创建账单分类
-# def category_add(category: schemas.category_add, db: Session):
+# def category_add(category: schemas.category_add, db: AsyncSession):
 #     stmt = select(User).where(User.id==category.user_id)
-#     user = db.scalar(stmt)
+#     user = await db.scalar(stmt)
 #     # 检查用户id是否存在
 #     if user is None:
 #         return -1
@@ -170,7 +170,7 @@ def user_update(user_id: int, user_data: schemas.User_update, db: Session):
 #         ) &
 #         (Bill_Category.type == category.type)       # 但是允许用户创建两个同名分类，当且仅当这两个分类类型不同时
 #     )
-#     check = db.scalar(stmt)
+#     check = await db.scalar(stmt)
 #     # 已存在同名的分类（不管是已存在同名的系统预设分类或是用户之前已经创建过同名的分类）
 #     if check is not None:
 #         return -2
@@ -183,22 +183,22 @@ def user_update(user_id: int, user_data: schemas.User_update, db: Session):
 #     )
 #     try:
 #         db.add(new_category)
-#         db.commit()
+#         await db.commit()
 #         return 1
 #     except Exception:
 #         return 0    # 数据库插入失败
 
 
 # # 用于修改账单分类
-# def category_update(category: schemas.category_update, db: Session):
+# def category_update(category: schemas.category_update, db: AsyncSession):
 #     stmt = select(User).where(User.id==category.user_id)
-#     user = db.scalar(stmt)
+#     user = await db.scalar(stmt)
 #     # 用户不存在
 #     if user is None:
 #         return -1
 #
 #     stmt = select(Bill_Category).where(Bill_Category.id==category.category_id)
-#     update_category = db.scalar(stmt)
+#     update_category = await db.scalar(stmt)
 #     # 分类不存在
 #     if update_category is None:
 #         return -2
@@ -220,7 +220,7 @@ def user_update(user_id: int, user_data: schemas.User_update, db: Session):
 #             ) &
 #             (Bill_Category.type == category.type)       # 而且是同一个类型的消费
 #         )
-#         check = db.scalar(stmt)
+#         check = await db.scalar(stmt)
 #         if check is not None:
 #             return -5
 #         else:
@@ -228,8 +228,8 @@ def user_update(user_id: int, user_data: schemas.User_update, db: Session):
 #                 # 由于之前已经获取过要更新的那个记录，所以这里直接修改
 #                 update_category.name=category.name
 #                 update_category.type=category.type
-#                 db.commit()
-#                 db.refresh(update_category)     # 此处最好刷新一下数据库中的记录状态
+#                 await db.commit()
+#                 await db.refresh(update_category)     # 此处最好刷新一下数据库中的记录状态
 #                 return 1
 #             except Exception:
 #                 # 数据库修改失败
@@ -237,9 +237,9 @@ def user_update(user_id: int, user_data: schemas.User_update, db: Session):
 
 
 # # 用于删除账单分类
-# def category_delete(category: schemas.category_delete, db: Session):
+# def category_delete(category: schemas.category_delete, db: AsyncSession):
 #     stmt = select(Bill_Category).where(Bill_Category.id==category.category_id)
-#     delete_category = db.scalar(stmt)
+#     delete_category = await db.scalar(stmt)
 #     # 不存在此分类
 #     if delete_category is None:
 #         return -1
@@ -251,7 +251,7 @@ def user_update(user_id: int, user_data: schemas.User_update, db: Session):
 #         return -3
 #
 #     stmt = select(Bill).where(Bill.category_id==category.category_id)
-#     check = db.scalars(stmt).first()
+#     check = await db.scalars(stmt).first()
 #     # 如果这个分类有账单存在，不能删除
 #     if check is not None:
 #         return -4
@@ -259,7 +259,7 @@ def user_update(user_id: int, user_data: schemas.User_update, db: Session):
 #     # 尝试进行删除操作
 #     try:
 #         db.delete(delete_category)
-#         db.commit()
+#         await db.commit()
 #         return 1
 #     except Exception:
 #         # 数据库修改失败
@@ -267,13 +267,14 @@ def user_update(user_id: int, user_data: schemas.User_update, db: Session):
 
 
 # 用于获取账单分类列表
-def category_list(type: int, db: Session):
+async def category_list(type: int, db: AsyncSession):
     try:
         # 获取分类(需要使用scalars)
         stmt = select(Bill_Category).where(
             (Bill_Category.type == type)
         )
-        sys_category = db.scalars(stmt).all()
+        result = await db.scalars(stmt)
+        sys_category = result.all()
     except Exception:
         return 0
 
@@ -291,10 +292,11 @@ def category_list(type: int, db: Session):
 
 
 # 用于获取支付方式列表
-def payment_method_list(db: Session):
+async def payment_method_list(db: AsyncSession):
     try:
         stmt = select(Payment_Method)
-        methods = db.scalars(stmt).all()
+        result = await db.scalars(stmt)
+        methods = result.all()
     except Exception:
         return 0
 
@@ -308,21 +310,21 @@ def payment_method_list(db: Session):
 
 
 # 用于创建账单
-def bill_add(bill: schemas.bill_add, db: Session):
+async def bill_add(bill: schemas.bill_add, db: AsyncSession):
     stmt = select(User).where(User.id == bill.user_id)
-    user = db.scalar(stmt)
+    user = await db.scalar(stmt)
     # 用户不存在
     if user is None:
         return -1
 
     stmt = select(Bill_Category).where(Bill_Category.id == bill.category_id)
-    category = db.scalar(stmt)
+    category = await db.scalar(stmt)
     # 分类不存在
     if category is None:
         return -2
 
     stmt = select(Payment_Method).where(Payment_Method.id == bill.method_id)
-    method = db.scalar(stmt)
+    method = await db.scalar(stmt)
     # 支付方式不存在
     if method is None:
         return -3
@@ -338,25 +340,25 @@ def bill_add(bill: schemas.bill_add, db: Session):
             bill_time=bill.bill_time
         )
         db.add(new_bill)
-        db.commit()
+        await db.commit()
         return 1
     except Exception:
         return 0
 
 
 # 用于修改账单
-def bill_update(bill: schemas.bill_update, db: Session):
+async def bill_update(bill: schemas.bill_update, db: AsyncSession):
     stmt = select(User).where(User.id == bill.user_id)
-    user = db.scalar(stmt)
+    user = await db.scalar(stmt)
 
     stmt = select(Bill_Category).where(Bill_Category.id == bill.category_id)
-    category = db.scalar(stmt)
+    category = await db.scalar(stmt)
 
     stmt = select(Payment_Method).where(Payment_Method.id == bill.method_id)
-    method = db.scalar(stmt)
+    method = await db.scalar(stmt)
 
     stmt = select(Bill).where(Bill.id == bill.bill_id)
-    target = db.scalar(stmt)
+    target = await db.scalar(stmt)
 
     # 用户不存在
     if user is None:
@@ -384,8 +386,8 @@ def bill_update(bill: schemas.bill_update, db: Session):
             remark=bill.remark,
             bill_time=bill.bill_time
         )
-        db.execute(stmt)
-        db.commit()
+        await db.execute(stmt)
+        await db.commit()
         return 1
     except Exception:
         # 数据库出错
@@ -393,15 +395,15 @@ def bill_update(bill: schemas.bill_update, db: Session):
 
 
 # 用于删除账单
-def bill_delete(bill: schemas.bill_delete, db: Session):
+async def bill_delete(bill: schemas.bill_delete, db: AsyncSession):
     stmt = select(User).where(User.id == bill.user_id)
-    user = db.scalar(stmt)
+    user = await db.scalar(stmt)
     # 用户不存在
     if user is None:
         return -1
 
     stmt = select(Bill).where(Bill.id == bill.bill_id)
-    target = db.scalar(stmt)
+    target = await db.scalar(stmt)
     # 账单不存在
     if target is None:
         return -2
@@ -412,17 +414,17 @@ def bill_delete(bill: schemas.bill_delete, db: Session):
     # 尝试删除
     try:
         db.delete(target)
-        db.commit()
+        await db.commit()
         return 1
     except Exception:
         return 0
 
 
 # 用于批量删除账单
-def bill_batch_delete(payload: schemas.bill_batch_delete, db: Session):
+async def bill_batch_delete(payload: schemas.bill_batch_delete, db: AsyncSession):
     # 校验用户存在
     stmt = select(User).where(User.id == payload.user_id)
-    user = db.scalar(stmt)
+    user = await db.scalar(stmt)
     if user is None:
         return -1
 
@@ -433,7 +435,8 @@ def bill_batch_delete(payload: schemas.bill_batch_delete, db: Session):
 
     # 查询所有目标账单
     stmt = select(Bill).where(Bill.id.in_(bill_ids))
-    bills = db.scalars(stmt).all()
+    result = await db.scalars(stmt)
+    bills = result.all()
 
     # 有不存在的 id（严格模式：不做部分删除）
     if len(bills) != len(bill_ids):
@@ -446,8 +449,8 @@ def bill_batch_delete(payload: schemas.bill_batch_delete, db: Session):
     # 执行批量删除
     try:
         stmt = delete(Bill).where(Bill.id.in_(bill_ids))
-        result = db.execute(stmt)
-        db.commit()
+        result = await db.execute(stmt)
+        await db.commit()
         # result.rowcount 在不同 DB 方言可能为 None，这里做兜底
         deleted_count = result.rowcount if result.rowcount is not None else len(bill_ids)
         return deleted_count
@@ -456,7 +459,7 @@ def bill_batch_delete(payload: schemas.bill_batch_delete, db: Session):
 
 
 # 用于获取账单
-def bill_list(user_id: int, the_time: str, page: int, page_size: int, type: int, db: Session):
+async def bill_list(user_id: int, the_time: str, page: int, page_size: int, type: int, db: AsyncSession):
     # 计算偏移量
     skip = (page - 1) * page_size
 
@@ -504,7 +507,7 @@ def bill_list(user_id: int, the_time: str, page: int, page_size: int, type: int,
         
         # 应用所有条件
         stmt = stmt.where(*conditions).order_by(desc(Bill.bill_time)).offset(skip).limit(page_size)
-        the_list = db.execute(stmt)
+        the_list = await db.execute(stmt)
     except Exception:
         return 0
 
@@ -530,9 +533,9 @@ def bill_list(user_id: int, the_time: str, page: int, page_size: int, type: int,
 
 
 # 用于获取账单记录条数和分页总数
-def get_bill_count(user_id: int, the_time: str, page_size: int, type: int, db: Session):
+async def get_bill_count(user_id: int, the_time: str, page_size: int, type: int, db: AsyncSession):
     stmt = select(User.id).where(User.id == user_id)
-    check = db.scalar(stmt)
+    check = await db.scalar(stmt)
     if check is None:
         return -1
 
@@ -565,7 +568,7 @@ def get_bill_count(user_id: int, the_time: str, page_size: int, type: int, db: S
 
         # 应用所有条件
         stmt = stmt.where(*conditions)
-        num = db.scalar(stmt)
+        num = await db.scalar(stmt)
     except Exception:
         return 0
 
@@ -582,9 +585,9 @@ def get_bill_count(user_id: int, the_time: str, page_size: int, type: int, db: S
 
 
 # 用于首页获取统计数据
-def bill_list_first(user_id: int, the_time: str, type: int, db: Session):
+async def bill_list_first(user_id: int, the_time: str, type: int, db: AsyncSession):
     stmt = select(User.id).where(User.id == user_id)
-    check = db.scalar(stmt)
+    check = await db.scalar(stmt)
     if check is None:
         return -1
 
@@ -632,7 +635,7 @@ def bill_list_first(user_id: int, the_time: str, type: int, db: Session):
 
         # 应用所有条件
         stmt = stmt.where(*conditions).order_by(desc(Bill.bill_time))
-        the_list = db.execute(stmt)
+        the_list = await db.execute(stmt)
     except Exception:
         return 0
 
@@ -657,7 +660,7 @@ def bill_list_first(user_id: int, the_time: str, type: int, db: Session):
     return result
 
 # 用于添加预算
-def budget_add(budget: schemas.budget_add, db: Session):
+async def budget_add(budget: schemas.budget_add, db: AsyncSession):
     # 修复：值输入验证（使用None而不是0）
     if budget.is_total == True and budget.category_id is not None:
         return -1  # 总预算时category_id必须为None
@@ -672,7 +675,7 @@ def budget_add(budget: schemas.budget_add, db: Session):
 
     try:
         stmt = select(User).where(User.id == budget.user_id)
-        user = db.scalar(stmt)
+        user = await db.scalar(stmt)
         # 用户不存在
         if user is None:
             return -3
@@ -686,7 +689,7 @@ def budget_add(budget: schemas.budget_add, db: Session):
                 (Budget.month == budget.month) &
                 (Budget.is_total == True)
             )
-            total_budget = db.scalar(stmt)
+            total_budget = await db.scalar(stmt)
             # 用户尚未设置月度总预算，此时不允许设置细分类目的预算
             if total_budget is None:
                 return -4
@@ -695,7 +698,7 @@ def budget_add(budget: schemas.budget_add, db: Session):
 
         try:
             stmt = select(Bill_Category).where((Bill_Category.id == budget.category_id))
-            category = db.scalar(stmt)
+            category = await db.scalar(stmt)
             # 分类不存在
             if category is None:
                 return -5
@@ -710,7 +713,7 @@ def budget_add(budget: schemas.budget_add, db: Session):
                 (Budget.month == budget.month) &
                 (Budget.category_id == budget.category_id)
             )
-            check = db.scalar(stmt)
+            check = await db.scalar(stmt)
             # 当月已存在同类预算
             if check is not None:
                 return -7
@@ -723,7 +726,7 @@ def budget_add(budget: schemas.budget_add, db: Session):
                 (Budget.month == budget.month) &
                 (Budget.is_total == True)
             )
-            check = db.scalar(stmt)
+            check = await db.scalar(stmt)
             # 当月已存在同类预算
             if check is not None:
                 return -7
@@ -751,9 +754,9 @@ def budget_add(budget: schemas.budget_add, db: Session):
                 month=budget.month
             )
         db.add(new_budget)
-        # db.commit() 不需要手动commit，get_db会自动commit
-        db.flush()  # 刷新以获取数据库生成的ID
-        db.refresh(new_budget)  # 刷新对象以获取ID
+        # await db.commit() 不需要手动commit，get_db会自动commit
+        await db.flush()  # 刷新以获取数据库生成的ID
+        await db.refresh(new_budget)  # 刷新对象以获取ID
         return new_budget  # 返回新创建的预算对象（包含ID）
     except Exception:
         # 尝试添加时发生数据库错误
@@ -761,10 +764,10 @@ def budget_add(budget: schemas.budget_add, db: Session):
 
 
 # 用于删除预算
-def budget_delete(budget: schemas.budget_delete, db: Session):
+async def budget_delete(budget: schemas.budget_delete, db: AsyncSession):
     stmt = select(User).where(User.id == budget.user_id)
     try:
-        user = db.scalar(stmt)
+        user = await db.scalar(stmt)
     except Exception:
         return 0
     # 用户不存在
@@ -773,7 +776,7 @@ def budget_delete(budget: schemas.budget_delete, db: Session):
 
     stmt = select(Budget).where(Budget.id == budget.budget_id)
     try:
-        target = db.scalar(stmt)
+        target = await db.scalar(stmt)
     except Exception:
         return 0
     # 预算不存在
@@ -792,7 +795,7 @@ def budget_delete(budget: schemas.budget_delete, db: Session):
                 (Budget.month == target.month) &
                 (Budget.is_total == False)
             )
-            db.execute(stmt)
+            await db.execute(stmt)
         except Exception:
             return 0
 
@@ -805,10 +808,10 @@ def budget_delete(budget: schemas.budget_delete, db: Session):
 
 
 # 用于修改预算（只能修改amount）
-def budget_update(budget: schemas.budget_update, db: Session):
+async def budget_update(budget: schemas.budget_update, db: AsyncSession):
     stmt = select(User).where(User.id == budget.user_id)
     try:
-        user = db.scalar(stmt)
+        user = await db.scalar(stmt)
     except Exception:
         return 0
     # 用户不存在
@@ -817,7 +820,7 @@ def budget_update(budget: schemas.budget_update, db: Session):
 
     stmt = select(Budget).where(Budget.id == budget.budget_id)
     try:
-        target = db.scalar(stmt)
+        target = await db.scalar(stmt)
     except Exception:
         return 0
     # 预算不存在
@@ -833,20 +836,20 @@ def budget_update(budget: schemas.budget_update, db: Session):
         stmt = update(Budget).where(Budget.id==budget.budget_id).values(
             amount = budget.amount
         )
-        db.execute(stmt)
+        await db.execute(stmt)
         # 修复：重新查询更新后的预算对象并返回
         stmt = select(Budget).where(Budget.id == budget.budget_id)
-        updated_budget = db.scalar(stmt)
+        updated_budget = await db.scalar(stmt)
         return updated_budget  # 返回更新后的预算对象
     except Exception:
         return 0
 
 
 # 用于获取某月的预算列表
-def budget_list_month(user_id: int, month: str, db: Session):
+async def budget_list_month(user_id: int, month: str, db: AsyncSession):
     stmt = select(User).where(User.id==user_id)
     try:
-        user = db.scalar(stmt)
+        user = await db.scalar(stmt)
         # 用户不存在
         if user is None:
             return -1
@@ -873,7 +876,8 @@ def budget_list_month(user_id: int, month: str, db: Session):
         (Budget.month == month)
     )
     try:
-        result_list = db.execute(stmt).all()
+        result = await db.execute(stmt)
+        result_list = result.all()
     except Exception:
         return 0
 
@@ -898,7 +902,7 @@ def budget_list_month(user_id: int, month: str, db: Session):
                 stmt_cat = select(Bill_Category.name).where(
                     Bill_Category.id == record.category_id
                 )
-                category_name = db.scalar(stmt_cat)
+                category_name = await db.scalar(stmt_cat)
                 item["name"] = category_name if category_name else "未知分类"
             except Exception:
                 item["name"] = "未知分类"
@@ -912,10 +916,10 @@ def budget_list_month(user_id: int, month: str, db: Session):
 以下为可视化部分的查询函数
 """
 # 获取近n天的消费趋势数据
-def get_trend_days(user_id: int, days: int, db: Session):
+async def get_trend_days(user_id: int, days: int, db: AsyncSession):
     stmt = select(User).filter(User.id==user_id)
     try:
-        user = db.scalar(stmt)
+        user = await db.scalar(stmt)
     except Exception:
         return 0
     if user is None:
@@ -951,7 +955,8 @@ def get_trend_days(user_id: int, days: int, db: Session):
     )
 
     try:
-        results = db.execute(stmt).all()
+        result = await db.execute(stmt)
+        results = result.all()
     except Exception:
         return 0
 
@@ -989,10 +994,10 @@ def get_trend_days(user_id: int, days: int, db: Session):
 
 
 # 获取近n个月的消费数据
-def get_trend_months(user_id: int, months: int, db: Session):
+async def get_trend_months(user_id: int, months: int, db: AsyncSession):
     stmt = select(User).filter(User.id == user_id)
     try:
-        user = db.scalar(stmt)
+        user = await db.scalar(stmt)
     except Exception:
         return 0
     if user is None:
@@ -1054,7 +1059,8 @@ def get_trend_months(user_id: int, months: int, db: Session):
     )
 
     try:
-        results = db.execute(stmt).all()
+        result = await db.execute(stmt)
+        results = result.all()
     except Exception:
         return 0
 
@@ -1098,10 +1104,10 @@ def get_trend_months(user_id: int, months: int, db: Session):
 
 
 # 获取近期账单
-def get_recent_bills(user_id: int, db: Session):
+async def get_recent_bills(user_id: int, db: AsyncSession):
     stmt = select(User).filter(User.id == user_id)
     try:
-        user = db.scalar(stmt)
+        user = await db.scalar(stmt)
     except Exception:
         return 0
     if user is None:
@@ -1120,7 +1126,8 @@ def get_recent_bills(user_id: int, db: Session):
     ).order_by(desc(Bill.bill_time)).limit(6)
 
     try:
-        bills = db.execute(stmt).all()
+        result = await db.execute(stmt)
+        bills = result.all()
     except Exception:
         return 0
 
@@ -1138,10 +1145,10 @@ def get_recent_bills(user_id: int, db: Session):
 
 
 # 消费列别占比（单个月，month=-1时为全部，month=0时为当月，month=1时为上个月，以此类推，最多往后推12个月）
-def get_propotion_month(user_id: int, month: int, db: Session):
+async def get_propotion_month(user_id: int, month: int, db: AsyncSession):
     # 1. 验证用户存在
     try:
-        user = db.scalar(select(User).filter(User.id == user_id))
+        user = await db.scalar(select(User).filter(User.id == user_id))
     except Exception:
         return 0
     if user is None:
@@ -1205,8 +1212,10 @@ def get_propotion_month(user_id: int, month: int, db: Session):
         func.sum(Bill.amount).desc()  # 按金额降序排列
     )
 
+
     try:
-        results = db.execute(stmt).all()
+        result = await db.execute(stmt)
+        results = result.all()
     except Exception:
         return 0
 
@@ -1241,10 +1250,11 @@ def get_propotion_month(user_id: int, month: int, db: Session):
     # 6. 处理没有消费数据的情况
     if total_amount == 0:
         # 尝试获取所有分类（即使没有消费）
-        all_categories = db.execute(
+        result = await db.execute(
             select(Bill_Category.id, Bill_Category.name)
             .order_by(Bill_Category.id)
-        ).all()
+        )
+        all_categories = result.all()
 
         for cat in all_categories:
             category_data.append({
