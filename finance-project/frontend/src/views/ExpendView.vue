@@ -888,6 +888,17 @@ const handleDeleteExpense = async (billId) => {
   }
 }
 
+// 取消编辑（恢复原始数据）
+const handleCancelRow = (row) => {
+  if (row._originalData) {
+    // 恢复原始数据
+    Object.assign(row, row._originalData)
+    // 清除保存的原始数据
+    delete row._originalData
+  }
+  row.isEditing = false
+}
+
 const handleBatchDelete = async () => {
   if (!selectedIds.value.length) {
     ElMessage.warning('请选择要删除的记录')
