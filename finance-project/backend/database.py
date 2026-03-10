@@ -31,13 +31,10 @@ async def get_db():
     """
     异步数据库依赖注入函数
     返回异步数据库会话
+    注意：CRUD 函数自己控制 commit/rollback
     """
     async with AsyncSessionLocal() as db:
         try:
             yield db   # 返回数据库会话给函数
-            await db.commit()    # 无异常，提交事务
-        except Exception:
-            await db.rollback()  # 有异常，回滚
-            raise   # 将异常向上提交，以便上层进行可能的异常处理
         finally:
             await db.close()     # 关闭这个会话

@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 from fastapi import File, UploadFile
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import joinedload
 from contextlib import asynccontextmanager
 
 import database, models, schemas, crud, security
@@ -711,17 +710,62 @@ async def export_user_data(
     导出用户的所有财务数据（CSV 或 Excel）
     """
     try:
-        bills = await db.scalars(
+        # 获取账单数据
+        stmt = (
             select(models.Bill)
-            .options(joinedload(models.Bill.bill_category), joinedload(models.Bill.payment_method))
             .where(models.Bill.user_id == current_user.id)
             .order_by(models.Bill.bill_time.desc())
-        ).all()
+        )
+        bills_result = await db.execute(stmt)
+        bills = bills_result.scalars().all()
 
-        budgets = await db.scalars(
+        # 获取预算数据
+        budgets = (await db.scalars(
             select(models.Budget)
             .where(models.Budget.user_id == current_user.id)
-        ).all()
+        )).all()
+
+        # 单独查询所有需要的关联数据，避免 N+1 问题
+        bill_ids = [bill.id for bill in bills]
+        if bill_ids:
+            # 获取所有分类
+            categories_result = await db.execute(
+                select(models.Bill_Category).where(
+                    models.Bill_Category.id.in_(
+                        select(models.Bill.category_id).where(
+                            models.Bill.id.in_(bill_ids)
+                        )
+                    )
+                )
+            )
+            categories = {c.id: c for c in categories_result.scalars().all()}
+
+            # 获取所有支付方式
+            methods_result = await db.execute(
+                select(models.Payment_Method).where(
+                    models.Payment_Method.id.in_(
+                        select(models.Bill.method_id).where(
+                            models.Bill.id.in_(bill_ids)
+                        )
+                    )
+                )
+            )
+            methods = {m.id: m for m in methods_result.scalars().all()}
+        else:
+            categories = {}
+            methods = {}
+
+        # 手动设置关联数据
+        for bill in bills:
+            if bill.category_id in categories:
+                bill.bill_category = categories[bill.category_id]
+            if bill.method_id in methods:
+                bill.payment_method = methods[bill.method_id]
+
+        # 手动设置预算的关联数据
+        for budget in budgets:
+            if budget.category_id and budget.category_id in categories:
+                budget.bill_category = categories[budget.category_id]
 
         rows = build_export_rows(current_user, bills, budgets)
 
@@ -1085,12 +1129,21 @@ def build_export_rows(user, bills, budgets):
     rows.append(user_row)
 
     for bill in bills:
-        # 关联对象可能因为懒加载/会话关闭等原因不可用，所以对 id/name 做兜底
-        bill_category = getattr(bill, "bill_category", None)
-        payment_method = getattr(bill, "payment_method", None)
+        # 直接使用 bill 对象的外键 ID，避免访问关联对象触发懒加载
+        category_id = bill.category_id
+        method_id = bill.method_id
 
-        category_id = getattr(bill, "category_id", None) or (getattr(bill_category, "id", None) if bill_category else None)
-        method_id = getattr(bill, "method_id", None) or (getattr(payment_method, "id", None) if payment_method else None)
+        # 获取关联对象的名称（这些已经在导出函数中手动设置过了）
+        category_name = ""
+        category_type = ""
+        method_name = ""
+
+        if hasattr(bill, "bill_category") and bill.bill_category:
+            category_name = bill.bill_category.name
+            category_type = bill.bill_category.type
+
+        if hasattr(bill, "payment_method") and bill.payment_method:
+            method_name = bill.payment_method.name
 
         r = _blank_row()
         r.update({
@@ -1103,10 +1156,10 @@ def build_export_rows(user, bills, budgets):
             "bill_remark": bill.remark or "",
             "bill_time": bill.bill_time.isoformat() if getattr(bill, "bill_time", None) else "",
             "category_id": category_id or "",
-            "category_name": (bill_category.name if bill_category else ""),
-            "category_type": (bill_category.type if bill_category else ""),
+            "category_name": category_name,
+            "category_type": category_type,
             "method_id": method_id or "",
-            "method_name": (payment_method.name if payment_method else ""),
+            "method_name": method_name,
         })
         rows.append(r)
 
@@ -1121,7 +1174,7 @@ def build_export_rows(user, bills, budgets):
             "budget_month": budget.month or "",
             "budget_is_total": bool(budget.is_total),
             "category_id": budget.category_id or "",
-            "category_name": budget.bill_category.name if budget.bill_category else "",
+            "category_name": "",
         })
         rows.append(r)
 

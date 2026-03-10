@@ -221,6 +221,7 @@
                           ({ columns, data }) => getSummary(columns, data, currentMonthBudget.totalBudget)
                         "
                         :cell-class-name="summaryCellStyle"
+                        :row-style="{ cursor: 'default' }"
                       >
                         <el-table-column prop="categoryName" label="预算类别" width="150" />
                         <el-table-column label="分类预算金额">
@@ -252,13 +253,14 @@
                             </span>
                           </template>
                         </el-table-column>
-                        <el-table-column label="操作" width="80">
+                        <el-table-column label="操作" width="100" align="center">
                           <template #default="scope">
                             <el-button
                               size="small"
                               type="primary"
-                              @click="saveCategoryBudget(getCurrentMonthIndex(), scope.row.id)"
+                              @click.stop="saveCategoryBudget(getCurrentMonthIndex(), scope.row.id)"
                               :loading="scope.row.saving"
+                              style="z-index: 999; position: relative; display: inline-block;"
                             >
                               保存
                             </el-button>
@@ -838,11 +840,17 @@ const checkSingleCategoryOverTotal = (
 
 // 11. 保存分类预算（改为异步，调用真实API）
 const saveCategoryBudget = async (monthIndex, categoryId) => {
+  console.log('[DEBUG] saveCategoryBudget 被调用:', { monthIndex, categoryId })
   const currentItem = monthBudgetList.value[monthIndex]
   const category = currentItem.categoryBudgets.find((item) => item.id === categoryId)
 
+  console.log('[DEBUG] 分类数据:', category)
+
   // 1. 前置校验：分类不存在则返回
-  if (!category) return
+  if (!category) {
+    console.error('[DEBUG] 分类不存在:', { categoryId, availableCategories: currentItem.categoryBudgets.map(c => c.id) })
+    return
+  }
 
   // 2. 添加loading状态（防止重复点击）
   category.saving = true
@@ -928,9 +936,22 @@ onMounted(async () => {
   // 2. 初始化默认月份（使用真实数据）
   await initDefaultMonthBudget()
 
-  // 3. 初始化选中的月份（选择第一个，通常是最新的月份）
+  // 3. 初始化选中的月份（优先选择当前月份）
   if (monthBudgetList.value.length > 0) {
-    selectedMonth.value = monthBudgetList.value[0].month
+    // 获取当前年月
+    const now = new Date()
+    const currentYear = now.getFullYear()
+    const currentMonth = String(now.getMonth() + 1).padStart(2, '0')
+    const currentMonthStr = `${currentYear}-${currentMonth}`
+
+    // 优先选择当前月份，如果列表中有当前月份的话
+    const currentMonthExists = monthBudgetList.value.find(item => item.month === currentMonthStr)
+    if (currentMonthExists) {
+      selectedMonth.value = currentMonthStr
+    } else {
+      // 如果没有当前月份，则选择第一个（最新的月份）
+      selectedMonth.value = monthBudgetList.value[0].month
+    }
   }
 })
 // ========== 核心业务逻辑结束 ==========

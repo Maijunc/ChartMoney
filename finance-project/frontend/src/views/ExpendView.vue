@@ -853,6 +853,13 @@ const handleSaveRow = async (row) => {
   }
 }
 
+// 编辑支出（行内编辑）
+const handleEditExpense = (row) => {
+  // 保存原始数据用于取消编辑
+  row._originalData = { ...row }
+  row.isEditing = true
+}
+
 const handleDeleteExpense = async (billId) => {
   if (!billId) {
     ElMessage.warning('该行尚未保存，无法删除')

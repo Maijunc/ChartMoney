@@ -396,27 +396,35 @@ async def bill_update(bill: schemas.bill_update, db: AsyncSession):
 
 # 用于删除账单
 async def bill_delete(bill: schemas.bill_delete, db: AsyncSession):
+    print(f"[DEBUG] 收到删除请求: user_id={bill.user_id}, bill_id={bill.bill_id}")
+
     stmt = select(User).where(User.id == bill.user_id)
     user = await db.scalar(stmt)
     # 用户不存在
     if user is None:
+        print(f"[DEBUG] 用户不存在: user_id={bill.user_id}")
         return -1
 
     stmt = select(Bill).where(Bill.id == bill.bill_id)
     target = await db.scalar(stmt)
     # 账单不存在
     if target is None:
+        print(f"[DEBUG] 账单不存在: bill_id={bill.bill_id}")
         return -2
     # 此账单不属于此用户
     if target.user_id != bill.user_id:
+        print(f"[DEBUG] 账单不属于此用户: bill_id={bill.bill_id}, user_id={target.user_id} != {bill.user_id}")
         return -3
 
     # 尝试删除
     try:
-        db.delete(target)
+        await db.delete(target)
         await db.commit()
+        print(f"[DEBUG] 删除成功: bill_id={bill.bill_id}")
         return 1
-    except Exception:
+    except Exception as e:
+        print(f"[DEBUG] 删除失败: {e}")
+        await db.rollback()
         return 0
 
 
@@ -754,11 +762,12 @@ async def budget_add(budget: schemas.budget_add, db: AsyncSession):
                 month=budget.month
             )
         db.add(new_budget)
-        # await db.commit() 不需要手动commit，get_db会自动commit
         await db.flush()  # 刷新以获取数据库生成的ID
         await db.refresh(new_budget)  # 刷新对象以获取ID
+        await db.commit()  # 提交事务
         return new_budget  # 返回新创建的预算对象（包含ID）
     except Exception:
+        await db.rollback()  # 回滚事务
         # 尝试添加时发生数据库错误
         return 0
 
@@ -801,7 +810,7 @@ async def budget_delete(budget: schemas.budget_delete, db: AsyncSession):
 
     # 对目标记录进行删除
     try:
-        db.delete(target)
+        await db.delete(target)
         return 1
     except Exception:
         return 0
@@ -837,11 +846,13 @@ async def budget_update(budget: schemas.budget_update, db: AsyncSession):
             amount = budget.amount
         )
         await db.execute(stmt)
+        await db.commit()  # 提交事务
         # 修复：重新查询更新后的预算对象并返回
         stmt = select(Budget).where(Budget.id == budget.budget_id)
         updated_budget = await db.scalar(stmt)
         return updated_budget  # 返回更新后的预算对象
     except Exception:
+        await db.rollback()  # 回滚事务
         return 0
 
 
