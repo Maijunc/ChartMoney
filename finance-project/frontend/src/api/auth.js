@@ -89,3 +89,18 @@ export function loginByPhone(data) {
     data
   })
 }
+
+/**
+ * 修改密码（通过手机验证码验证）
+ * @param {Object} data
+ * @param {string} data.phone - 手机号
+ * @param {string} data.verify_code - 验证码
+ * @param {string} data.new_password - 新密码
+ */
+export function changePassword(data) {
+  return request({
+    url: '/user/change_password',
+    method: 'post',
+    data
+  })
+}

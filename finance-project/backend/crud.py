@@ -68,6 +68,34 @@ async def get_user_info_by_phone(phone: str, db: AsyncSession):
     return select_user
 
 
+# 用于修改密码（通过手机验证码验证）
+# 返回值说明：
+#   - 成功：返回更新后的用户对象 (User)
+#   - 失败：返回错误代码
+#     -1: 用户不存在
+#     -2: 验证码验证失败
+#     0: 数据库异常
+async def user_change_password(phone: str, new_password: str, db: AsyncSession):
+    # 查找用户
+    stmt = select(User).where(User.phone == phone)
+    user = await db.scalar(stmt)
+
+    if user is None:
+        return -1  # 用户不存在
+
+    # 更新密码
+    try:
+        hashed_password = security.hash_password(new_password)
+        user.password = hashed_password
+        await db.commit()
+        await db.refresh(user)
+        return user
+    except Exception as e:
+        print(f"修改密码失败: {e}")
+        await db.rollback()
+        return 0
+
+
 # 用于用户的注册
 # 返回值说明：
 #   - 成功：返回新创建的用户对象 (User)

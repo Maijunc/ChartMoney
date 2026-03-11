@@ -89,6 +89,13 @@ class bill_update(BaseModel):
     remark: str = Field(max_length=255)
 
 
+# 用于修改密码
+class User_password(BaseModel):
+    phone: str = Field(..., min_length=11, max_length=11, pattern=r"^1\d{10}$")
+    verify_code: str = Field(..., min_length=4, max_length=4, pattern=r"^\d{4}$")
+    new_password: str = Field(..., min_length=1, max_length=64)
+
+
 # 用于删除账单
 class bill_delete(BaseModel):
     user_id: int = Field(..., ge=1)

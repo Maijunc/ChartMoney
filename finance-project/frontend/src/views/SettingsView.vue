@@ -242,6 +242,78 @@
                     </div>
                   </el-card>
 
+                  <!-- ✅ 新增：修改密码（验证码验证） -->
+                  <el-card style="margin-bottom: 15px">
+                    <template #header>
+                      <span>修改密码</span>
+                    </template>
+
+                    <el-alert
+                      title="安全提示"
+                      type="info"
+                      :closable="false"
+                      style="margin-bottom: 15px"
+                    >
+                      通过手机验证码验证后即可修改密码，无需输入旧密码。
+                    </el-alert>
+
+                    <el-form :model="passwordForm" label-width="100px">
+                      <el-form-item label="手机号">
+                        <el-input v-model="passwordForm.phone" placeholder="请输入绑定的手机号" maxlength="11" disabled />
+                      </el-form-item>
+
+                      <el-form-item label="验证码">
+                        <div style="display: flex; gap: 10px; width: 100%">
+                          <el-input
+                            v-model="passwordForm.verify_code"
+                            placeholder="请输入验证码"
+                            maxlength="6"
+                            style="flex: 1"
+                          />
+                          <el-button
+                            type="primary"
+                            :disabled="!userStore.phone || sendPasswordCodeLoading || passwordCountdown > 0"
+                            :loading="sendPasswordCodeLoading"
+                            @click="handleSendPasswordCode"
+                            style="width: 140px"
+                          >
+                            {{ passwordCountdown > 0 ? `${passwordCountdown}s后重试` : '发送验证码' }}
+                          </el-button>
+                        </div>
+                      </el-form-item>
+
+                      <el-form-item label="新密码">
+                        <el-input
+                          v-model="passwordForm.new_password"
+                          type="password"
+                          placeholder="请输入新密码"
+                          show-password
+                          maxlength="64"
+                        />
+                      </el-form-item>
+
+                      <el-form-item label="确认密码">
+                        <el-input
+                          v-model="passwordForm.confirm_password"
+                          type="password"
+                          placeholder="请再次输入新密码"
+                          show-password
+                          maxlength="64"
+                        />
+                      </el-form-item>
+
+                      <el-form-item>
+                        <el-button type="primary" :loading="changePasswordLoading" @click="handleChangePassword">
+                          确认修改
+                        </el-button>
+                      </el-form-item>
+                    </el-form>
+
+                    <div style="font-size: 12px; color: #999; margin-top: 8px">
+                      提示：修改密码后需要重新登录。建议使用复杂密码以提高账户安全性。
+                    </div>
+                  </el-card>
+
                   <el-card
                     v-for="(item, index) in securityItems"
                     :key="index"
@@ -407,6 +479,7 @@ import {
 } from '@element-plus/icons-vue'
 import PageTagsNav from '@/components/PageTagsNav.vue'
 import { sendVerifyCode, verifyCode } from '@/api'
+import { changePassword } from '@/api/auth'
 
 // 路由跳转逻辑
 const router = useRouter()
@@ -652,12 +725,6 @@ const saveProfile = async () => {
 // 账户安全设置项
 const securityItems = ref([
   {
-    title: '修改密码',
-    desc: '当前密码强度：中，建议定期更换密码',
-    buttonText: '修改',
-    type: 'password',
-  },
-  {
     title: '邮箱验证',
     desc: '已验证：user@example.com',
     buttonText: '重新验证',
@@ -680,9 +747,6 @@ const securityItems = ref([
 // 账户安全操作处理
 const handleSecurityOperation = (type) => {
   switch (type) {
-    case 'password':
-      ElMessage.info('跳转到修改密码页面')
-      break
     case 'phone':
       ElMessage.info('跳转到更换手机号页面')
       break
@@ -694,8 +758,8 @@ const handleSecurityOperation = (type) => {
       break
     case 'loginProtect':
       ElMessage.success('登录保护已开启')
-      securityItems.value[3].desc = '已开启，异地登录需要验证'
-      securityItems.value[3].buttonText = '关闭'
+      securityItems.value[2].desc = '已开启，异地登录需要验证'
+      securityItems.value[2].buttonText = '关闭'
       break
     default:
       break
@@ -940,6 +1004,111 @@ const startCountdown = (seconds = 60) => {
   }, 1000)
 }
 
+// ========== 修改密码（短信验证码） ==========
+const passwordForm = ref({
+  phone: '',
+  verify_code: '',
+  new_password: '',
+  confirm_password: ''
+})
+
+const sendPasswordCodeLoading = ref(false)
+const changePasswordLoading = ref(false)
+const passwordCountdown = ref(0)
+let passwordCountdownTimer = null
+
+const startPasswordCountdown = (seconds = 60) => {
+  passwordCountdown.value = seconds
+  if (passwordCountdownTimer) clearInterval(passwordCountdownTimer)
+  passwordCountdownTimer = setInterval(() => {
+    passwordCountdown.value -= 1
+    if (passwordCountdown.value <= 0) {
+      clearInterval(passwordCountdownTimer)
+      passwordCountdownTimer = null
+    }
+  }, 1000)
+}
+
+const handleSendPasswordCode = async () => {
+  const phone = userStore.phone
+  if (!phone) {
+    ElMessage.warning('请先绑定手机号')
+    return
+  }
+
+  try {
+    sendPasswordCodeLoading.value = true
+    await sendVerifyCode({ phone, type: 3 })
+    ElMessage.success('验证码已发送')
+    startPasswordCountdown(60)
+  } catch (e) {
+    console.error(e)
+  } finally {
+    sendPasswordCodeLoading.value = false
+  }
+}
+
+const handleChangePassword = async () => {
+  const phone = userStore.phone
+  const code = passwordForm.value.verify_code.trim()
+  const newPassword = passwordForm.value.new_password.trim()
+  const confirmPassword = passwordForm.value.confirm_password.trim()
+
+  if (!phone) {
+    ElMessage.warning('请先绑定手机号')
+    return
+  }
+
+  if (!/^\d{4,6}$/.test(code)) {
+    ElMessage.warning('请输入正确的验证码')
+    return
+  }
+
+  if (!newPassword) {
+    ElMessage.warning('请输入新密码')
+    return
+  }
+
+  if (newPassword.length < 6) {
+    ElMessage.warning('新密码长度不能少于6位')
+    return
+  }
+
+  if (newPassword !== confirmPassword) {
+    ElMessage.warning('两次输入的密码不一致')
+    return
+  }
+
+  try {
+    changePasswordLoading.value = true
+
+    const res = await changePassword({
+      phone,
+      verify_code: code,
+      new_password: newPassword
+    })
+
+    if (res.code === 200) {
+      ElMessage.success('密码修改成功，即将跳转到登录页面')
+
+      // 清空表单
+      passwordForm.value.verify_code = ''
+      passwordForm.value.new_password = ''
+      passwordForm.value.confirm_password = ''
+
+      // 延迟跳转到登录页
+      setTimeout(() => {
+        userStore.logout()
+        router.push('/login')
+      }, 1500)
+    }
+  } catch (e) {
+    console.error(e)
+  } finally {
+    changePasswordLoading.value = false
+  }
+}
+
 const handleSendBindPhoneCode = async () => {
   const phone = (bindPhoneForm.value.phone || '').trim()
   if (!isValidPhone(phone)) {
@@ -999,11 +1168,13 @@ onMounted(() => {
   // 预填当前手机号
   if (userStore.phone) {
     bindPhoneForm.value.phone = userStore.phone
+    passwordForm.value.phone = userStore.phone
   }
 })
 
 onUnmounted(() => {
   if (countdownTimer) clearInterval(countdownTimer)
+  if (passwordCountdownTimer) clearInterval(passwordCountdownTimer)
 })
 </script>
 

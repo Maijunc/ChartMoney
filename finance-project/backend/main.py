@@ -184,6 +184,37 @@ async def verify_code(phone_code: schemas.User_phone_code):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="验证码验证失败")
 
 
+# 修改密码（通过手机验证码验证）
+@app.post('/user/change_password')
+async def change_password(password_data: schemas.User_password, db: AsyncSession = Depends(database.get_db)):
+    """
+    修改密码
+    需要提供手机号、验证码和新密码
+    """
+    try:
+        # 1. 先验证验证码
+        verify_sms(phone_number=password_data.phone, verify_code=password_data.verify_code)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="验证码验证失败")
+    
+    # 2. 修改密码
+    result = await crud.user_change_password(password_data.phone, password_data.new_password, db)
+    
+    if isinstance(result, models.User):
+        return {
+            "code": status.HTTP_200_OK,
+            "message": "密码修改成功，请重新登录",
+            "data": {
+                "user_id": result.id,
+                "username": result.username
+            }
+        }
+    elif result == -1:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+    elif result == 0:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="修改密码失败，请稍后重试")
+
+
 # 用户注册处理函数
 @app.post("/user/register")
 async def user_register(user: schemas.User_register, db: AsyncSession = Depends(database.get_db)):
