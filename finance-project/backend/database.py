@@ -14,9 +14,15 @@ ASYNC_SQLALCHEMY_DATABASE_URL = "mysql+aiomysql://root:wufulin951753.@127.0.0.1:
 # 创建异步引擎
 engine = create_async_engine(
     ASYNC_SQLALCHEMY_DATABASE_URL,
-    echo=False,  # 生产环境设为 False
-    pool_pre_ping=True,  # 连接健康检查
-    pool_recycle=3600,  # 连接回收时间
+    echo=False,
+    pool_pre_ping=True,
+    pool_recycle=3600,
+
+    # 连接池配置
+    pool_size=10,  # 连接池中保持的连接数
+    max_overflow=20,  # 超过 pool_size 后最多再创建的连接数
+    pool_timeout=30,  # 获取连接的超时时间（秒）
+    pool_reset_on_return='commit',  # 连接归还时重置状态
 )
 
 # 创建异步会话工厂
