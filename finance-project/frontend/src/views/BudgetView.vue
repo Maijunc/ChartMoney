@@ -930,6 +930,13 @@ const saveCategoryBudget = async (monthIndex, categoryId) => {
 }
 // 12. 页面挂载初始化
 onMounted(async () => {
+  // 检查用户是否登录
+  if (!userStore.isLogin) {
+    ElMessage.warning('请先登录')
+    router.push('/login')
+    return
+  }
+
   // 1. 加载分类列表
   await loadCategories()
 

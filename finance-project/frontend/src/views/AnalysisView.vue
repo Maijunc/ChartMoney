@@ -148,6 +148,7 @@
 // 修复导入顺序，先导入所有依赖
 import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user.js'
 import useDashboardLogic from '@/stores/dashboardLogic.js'
 import PageTagsNav from '@/components/PageTagsNav.vue'
@@ -231,6 +232,13 @@ watch(propotionTimeRange, (newValue) => {
 
 // 页面挂载初始化图表
 onMounted(() => {
+  // 检查用户是否登录
+  if (!userStore.isLogin) {
+    ElMessage.warning('请先登录')
+    router.push('/login')
+    return
+  }
+
   // 增加DOM存在性判断，防止图表初始化失败
   setTimeout(() => {
     initDayTrendChart()

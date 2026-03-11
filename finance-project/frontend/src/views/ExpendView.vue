@@ -444,6 +444,13 @@ const paymentMethodList = ref([]) // 支付方式列表（用于下拉框）
 
 // ✅ 补上挂载初始化：ExpendView 之前缺少 onMounted，导致分类/支付方式/账单数据都不会初始化
 onMounted(async () => {
+  // 检查用户是否登录
+  if (!userStore.isLogin) {
+    ElMessage.warning('请先登录')
+    router.push('/login')
+    return
+  }
+
   initYearOptions()
   console.log('🔄 开始初始化支出页面数据...')
 

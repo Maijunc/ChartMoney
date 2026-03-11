@@ -468,6 +468,12 @@ const handleJumpToSettings = () => {
 
 // ========== 页面挂载初始化 ==========
 onMounted(async () => {
+  // 检查用户是否登录
+  if (!userStore.isLogin) {
+    ElMessage.warning('请先登录')
+    router.push('/login')
+    return
+  }
 
   initYearOptions() // 初始化年份选择器
 
