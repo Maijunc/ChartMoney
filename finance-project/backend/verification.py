@@ -18,7 +18,6 @@ def send_sms(
         phone_number: str,
         code: str
     ) -> None:
-        # client = Sample.create_client()
         client = sms_client
         send_sms_verify_code_request = dypnsapi_20170525_models.SendSmsVerifyCodeRequest(
             phone_number=phone_number,
@@ -31,8 +30,6 @@ def send_sms(
             resp = client.send_sms_verify_code_with_options(send_sms_verify_code_request, runtime)
             print(json.dumps(resp, default=str, indent=2))
         except Exception as error:
-            # 此处仅做打印展示，请谨慎对待异常处理，在工程项目中切勿直接忽略异常。
-            # 错误 message
             raise error
 
 def verify_sms(
@@ -49,6 +46,4 @@ def verify_sms(
             resp = client.check_sms_verify_code_with_options(check_sms_verify_code_request, runtime)
             print(json.dumps(resp, default=str, indent=2))
         except Exception as error:
-            # 此处仅做打印展示，请谨慎对待异常处理，在工程项目中切勿直接忽略异常。
-            # 错误 message
             raise error

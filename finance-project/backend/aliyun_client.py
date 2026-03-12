@@ -28,11 +28,6 @@ class AliyunSMSClient:
         创建阿里云客户端
         """
         try:
-            # 方法1：使用阿里云凭据链（自动从环境变量读取）
-            # 这是最推荐的方式，SDK会自动读取 ALIBABA_CLOUD_ACCESS_KEY_ID 等环境变量
-            # credential = CredentialClient()
-            
-            # 方法2：如果上述方法不工作，可以显式传入
             from alibabacloud_credentials.models import Config as CredentialConfig
             credential_config = CredentialConfig(
                 type='access_key',
