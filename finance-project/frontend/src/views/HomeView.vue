@@ -293,8 +293,6 @@ const {
   budgetUsage,
   recentBills,
   fetchDashboardData,
-  initTrendChart,
-  initCategoryChart,
 } = useDashboardLogic()
 
 // 页面挂载初始化
@@ -308,12 +306,6 @@ onMounted(async () => {
 
   // 先加载实际数据
   await fetchDashboardData()
-
-  // 增加DOM存在性判断，防止图表初始化失败
-  setTimeout(() => {
-    initTrendChart()
-    initCategoryChart()
-  }, 100)
 })
 
 // 左侧菜单选择：只保持当前高亮，不再维护标签数组

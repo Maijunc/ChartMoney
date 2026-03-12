@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import * as echarts from 'echarts'
 import { getBillListFirst } from '@/api/bill.js'
-import { getTrendDays, getTrendMonths, getExpenseProportionMonth } from '@/api/analysis.js'
+import { getTrendDays, getTrendMonths, getExpenseProportionMonth, getDashboardSummary } from '@/api/analysis.js'
 import { getBudgetListByMonth } from '@/api/budget.js'
 import { useUserStore } from '@/stores/user.js'
 import { ElMessage } from 'element-plus'
@@ -49,7 +49,7 @@ export default function useDashboardLogic() {
   }
 
   /**
-   * 从API获取账单数据并计算统计信息
+   * 从API获取仪表盘统计数据
    */
   const fetchDashboardData = async () => {
     if (!userStore.isLogin) {
@@ -59,11 +59,30 @@ export default function useDashboardLogic() {
 
     isLoading.value = true
     try {
-      const currentMonth = getCurrentMonth()
-      const lastMonth = getLastMonth()
+      // 调用新的仪表盘统计API
+      const response = await getDashboardSummary({
+        user_id: userStore.userId
+      })
 
-      // 获取当月账单（收入和支出）
-      const [incomeBills, expenseBills, lastMonthIncome, lastMonthExpense, budgetData] = await Promise.all([
+      // response 已经是响应拦截器处理后的 {code, message, data}
+      const data = response.data
+
+      // 更新本月数据
+      monthlyIncome.value = data.current_month.income
+      monthlyExpense.value = data.current_month.expense
+
+      // 更新预算使用情况
+      monthlyBudget.value = data.budget.total_budget
+      budgetUsage.value = data.budget.usage_rate
+
+      // 更新增长率
+      incomeGrowth.value = data.growth.income_growth
+      expenseGrowth.value = data.growth.expense_growth
+      balanceRate.value = data.growth.balance_growth
+
+      // 近期账单保持原有逻辑，后续优化
+      const currentMonth = getCurrentMonth()
+      const [incomeBills, expenseBills] = await Promise.all([
         getBillListFirst({
           user_id: userStore.userId,
           the_time: currentMonth,
@@ -73,81 +92,8 @@ export default function useDashboardLogic() {
           user_id: userStore.userId,
           the_time: currentMonth,
           type: 2 // 2=支出
-        }),
-        getBillListFirst({
-          user_id: userStore.userId,
-          the_time: lastMonth,
-          type: 1
-        }),
-        getBillListFirst({
-          user_id: userStore.userId,
-          the_time: lastMonth,
-          type: 2
-        }),
-        // 获取当月预算数据
-        getBudgetListByMonth({
-          user_id: userStore.userId,
-          month: currentMonth
         })
       ])
-
-      // 计算当月收入和支出总额
-      const currentIncome =
-        incomeBills?.data?.reduce((sum, bill) => sum + (parseFloat(bill.amount) || 0), 0) || 0
-      const currentExpense =
-        expenseBills?.data?.reduce((sum, bill) => sum + (parseFloat(bill.amount) || 0), 0) || 0
-
-      // 计算上月总额
-      const previousIncome =
-        lastMonthIncome?.data?.reduce((sum, bill) => sum + (parseFloat(bill.amount) || 0), 0) || 0
-      const previousExpense =
-        lastMonthExpense?.data?.reduce((sum, bill) => sum + (parseFloat(bill.amount) || 0), 0) || 0
-
-      // 更新数据
-      monthlyIncome.value = currentIncome
-      monthlyExpense.value = currentExpense
-
-      // 计算增长率
-      if (previousIncome > 0) {
-        incomeGrowth.value = parseFloat(
-          (((currentIncome - previousIncome) / previousIncome) * 100).toFixed(1)
-        )
-      } else {
-        incomeGrowth.value = currentIncome > 0 ? 100 : 0
-      }
-
-      if (previousExpense > 0) {
-        expenseGrowth.value = parseFloat(
-          (((currentExpense - previousExpense) / previousExpense) * 100).toFixed(1)
-        )
-      } else {
-        expenseGrowth.value = currentExpense > 0 ? 100 : 0
-      }
-
-      // 计算结余增长率
-      const currentBalance = currentIncome - currentExpense
-      const previousBalance = previousIncome - previousExpense
-      if (previousBalance !== 0) {
-        balanceRate.value = parseFloat(
-          (((currentBalance - previousBalance) / Math.abs(previousBalance)) * 100).toFixed(1)
-        )
-      } else {
-        balanceRate.value = currentBalance > 0 ? 100 : 0
-      }
-
-      // 计算预算使用率
-      // 从API获取的预算数据中提取月度总预算（is_total === true）
-      let totalMonthlyBudget = 0
-      if (budgetData?.data && Array.isArray(budgetData.data)) {
-        const totalBudget = budgetData.data.find((item) => item.is_total === true)
-        totalMonthlyBudget = totalBudget ? parseFloat(totalBudget.amount || 0) : 0
-      }
-
-      // 如果没有设置预算，使用默认值10000
-      monthlyBudget.value = totalMonthlyBudget > 0 ? totalMonthlyBudget : 10000
-      budgetUsage.value = monthlyBudget.value > 0
-        ? parseFloat(((currentExpense / monthlyBudget.value) * 100).toFixed(1))
-        : 0
 
       // 合并所有账单用于近期账单显示
       const allBills = [

@@ -737,6 +737,31 @@ async def get_propotion_month(user_id: int = Query(..., ge=1),
         }
 
 
+# 仪表盘统计数据
+@app.get("/analysis/dashboard")
+async def dashboard_summary(
+    user_id: int = Query(..., ge=1),
+    db: AsyncSession = Depends(database.get_db)
+):
+    """
+    获取仪表盘统计数据
+    参数：
+    - user_id: 用户ID
+    """
+    result = await crud.get_dashboard_summary(user_id, db)
+
+    if result == 0:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
+    elif result == -1:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="该用户不存在")
+    else:
+        return {
+            "code": status.HTTP_200_OK,
+            "message": "成功",
+            "data": result
+        }
+
+
 # 预算使用情况分析
 @app.get("/analysis/budget_usage")
 async def budget_usage(user_id: int = Query(..., ge=1),

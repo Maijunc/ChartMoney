@@ -108,3 +108,19 @@ export function getPaymentMethodDistribution(params) {
     }
   })
 }
+
+/**
+ * 获取仪表盘统计数据
+ * @param {Object} params
+ * @param {number} params.user_id - 用户ID
+ * @returns {Promise}
+ */
+export function getDashboardSummary(params) {
+  return request({
+    url: '/analysis/dashboard',
+    method: 'get',
+    params: {
+      user_id: params.user_id
+    }
+  })
+}

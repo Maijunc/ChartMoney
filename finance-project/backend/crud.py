@@ -1509,3 +1509,183 @@ async def get_payment_method_distribution(user_id: int, month: str, db: AsyncSes
 
     return period_description, result_data
 
+
+# 仪表盘统计数据
+async def get_dashboard_summary(user_id: int, db: AsyncSession):
+    """
+    获取仪表盘统计数据
+    包括：本月收支、上月收支、增长率、预算使用情况
+    """
+    # 1. 验证用户存在
+    try:
+        user = await db.scalar(select(User).where(User.id == user_id))
+        if user is None:
+            return -1
+    except Exception:
+        return 0
+
+    # 2. 获取当前月份和上个月份
+    now = datetime.now()
+    current_month = now.strftime('%Y-%m')
+
+    # 计算上个月
+    if now.month == 1:
+        last_month = f"{now.year - 1}-12"
+    else:
+        last_month = f"{now.year}-{now.month - 1:02d}"
+
+    # 3. 辅助函数：计算月份时间范围
+    def get_month_range(month_str: str):
+        """获取月份的开始和结束时间"""
+        start_time = datetime.strptime(f"{month_str}-01", "%Y-%m-%d")
+        if start_time.month == 12:
+            end_time = start_time.replace(year=start_time.year + 1, month=1, day=1)
+        else:
+            end_time = start_time.replace(month=start_time.month + 1, day=1)
+        return start_time, end_time
+
+    # 4. 查询本月收入
+    current_start, current_end = get_month_range(current_month)
+    try:
+        income_result = await db.execute(
+            select(func.sum(Bill.amount).label("total"))
+            .join(
+                Bill_Category,
+                Bill.category_id == Bill_Category.id
+            )
+            .where(
+                Bill.user_id == user_id,
+                Bill_Category.type == 1,
+                Bill.bill_time >= current_start,
+                Bill.bill_time < current_end
+            )
+        )
+        current_income = float(income_result.scalar() or 0)
+    except Exception as e:
+        print(f"查询本月收入失败: {e}")
+        current_income = 0.0
+
+    # 5. 查询本月支出
+    try:
+        expense_result = await db.execute(
+            select(func.sum(Bill.amount).label("total"))
+            .join(
+                Bill_Category,
+                Bill.category_id == Bill_Category.id
+            )
+            .where(
+                Bill.user_id == user_id,
+                Bill_Category.type == 2,
+                Bill.bill_time >= current_start,
+                Bill.bill_time < current_end
+            )
+        )
+        current_expense = float(expense_result.scalar() or 0)
+    except Exception as e:
+        print(f"查询本月支出失败: {e}")
+        current_expense = 0.0
+
+    # 6. 查询上月收入
+    last_start, last_end = get_month_range(last_month)
+    try:
+        last_income_result = await db.execute(
+            select(func.sum(Bill.amount).label("total"))
+            .join(
+                Bill_Category,
+                Bill.category_id == Bill_Category.id
+            )
+            .where(
+                Bill.user_id == user_id,
+                Bill_Category.type == 1,
+                Bill.bill_time >= last_start,
+                Bill.bill_time < last_end
+            )
+        )
+        last_income = float(last_income_result.scalar() or 0)
+    except Exception as e:
+        print(f"查询上月收入失败: {e}")
+        last_income = 0.0
+
+    # 7. 查询上月支出
+    try:
+        last_expense_result = await db.execute(
+            select(func.sum(Bill.amount).label("total"))
+            .join(
+                Bill_Category,
+                Bill.category_id == Bill_Category.id
+            )
+            .where(
+                Bill.user_id == user_id,
+                Bill_Category.type == 2,
+                Bill.bill_time >= last_start,
+                Bill.bill_time < last_end
+            )
+        )
+        last_expense = float(last_expense_result.scalar() or 0)
+    except Exception as e:
+        print(f"查询上月支出失败: {e}")
+        last_expense = 0.0
+
+    # 8. 计算本月和上月的结余
+    current_balance = current_income - current_expense
+    last_balance = last_income - last_expense
+
+    # 9. 计算增长率（保留1位小数）
+    def calculate_growth(current: float, previous: float) -> float:
+        """计算增长率"""
+        if previous == 0:
+            # 如果上个月为0,本月有数据则增长率为100%,否则为0
+            return 100.0 if current > 0 else 0.0
+        return round(((current - previous) / abs(previous)) * 100, 1)
+
+    income_growth = calculate_growth(current_income, last_income)
+    expense_growth = calculate_growth(current_expense, last_expense)
+    balance_growth = calculate_growth(current_balance, last_balance)
+
+    # 10. 查询预算使用情况
+    try:
+        budget_result = await db.execute(
+            select(Budget.amount)
+            .where(
+                (Budget.user_id == user_id) &
+                (Budget.month == current_month) &
+                (Budget.is_total == True)
+            )
+        )
+        total_budget = float(budget_result.scalar() or 0)
+    except Exception:
+        total_budget = 0.0
+
+    # 如果没有设置预算,使用默认值10000
+    if total_budget == 0:
+        total_budget = 10000.0
+
+    budget_used = current_expense
+    budget_usage_rate = round((budget_used / total_budget * 100), 1) if total_budget > 0 else 0.0
+    budget_remaining = total_budget - budget_used
+
+    # 11. 返回汇总数据
+    return {
+        "current_month": {
+            "income": round(current_income, 2),
+            "expense": round(current_expense, 2),
+            "balance": round(current_balance, 2)
+        },
+        "last_month": {
+            "income": round(last_income, 2),
+            "expense": round(last_expense, 2),
+            "balance": round(last_balance, 2)
+        },
+        "growth": {
+            "income_growth": income_growth,
+            "expense_growth": expense_growth,
+            "balance_growth": balance_growth
+        },
+        "budget": {
+            "total_budget": round(total_budget, 2),
+            "used": round(budget_used, 2),
+            "usage_rate": budget_usage_rate,
+            "remaining": round(budget_remaining, 2)
+        }
+    }
+
