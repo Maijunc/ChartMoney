@@ -1,186 +1,83 @@
-# ChartMoney
-"查特猫" A personal financial management and visual analysis system
+# ChartMoney (查特猫) - 个人记账与可视化分析系统
 
-**致团队成员：** 请务必按照以下步骤配置开发环境。如果有报错，请先截图发群里，不要自己闷头改配置。
+本项目分为 FastAPI 后端与 Vue3 前端两部分。为了能够顺利运行和体验完整功能，请按照以下步骤依次启动。
 
-## 🛠️ 0. 环境准备 (所有人都必须安装)
+## 目录结构
+* `finance-project/backend`: 后端服务 (FastAPI)
+* `finance-project/frontend`: 前端展示 (Vue3 + Vite)
 
-在开始之前，请确保你的电脑安装了以下软件：
+---
 
-1. **Git:** [下载地址](https://www.google.com/search?q=https://git-scm.com/downloads) (用于代码同步)
-2. **Python 3.9+:** [下载地址](https://www.python.org/downloads/) (后端语言)
-   - *注意：安装时务必勾选 "Add Python to PATH"*
-3. **Node.js (LTS版本):** [下载地址](https://nodejs.org/zh-cn/) (前端运行环境)
-4. **MySQL 8.0+:** (数据库)
-   - 推荐安装 Navicat 或 DBeaver 作为可视化客户端。
+## 1. 基础环境准备
+在开始之前，请确保本地已安装以下基础环境：
+* **Anaconda / Miniconda** (用于配置 Python 隔离环境)
+* **Node.js** (v20 及以上，用于启动前端)
+* **MySQL** (v8.0 及以上)
 
-------
+**准备数据库：** 请提前在本地 MySQL 中创建一个空的数据库，命名为 `finance_db`。
 
-## 🚀 1. 项目初始化 (只做一次)
+---
 
-打开终端 (CMD / PowerShell / Terminal)，执行以下命令：
+## 2. 后端服务部署
 
-Bash
+请打开终端，进入后端目录：
+`cd finance-project/backend`
 
-```
-# 1. 克隆项目 (换成咱们仓库的地址)
-git clone https://github.com/你的用户名/仓库名.git
+### 2.1 配置 Python 虚拟环境
+强烈建议使用 conda 创建独立的虚拟环境，以避免与其他项目冲突：
+`conda create -n chartmoney python=3.12.7 -y`
+`conda activate chartmoney`
 
-# 2. 进入项目目录
-cd finance-project
-```
+### 2.2 安装依赖包
+执行以下命令安装项目所需依赖：
+`pip install -r requirements.txt`
 
-------
+> **提示：** 由于开发时使用了基础的 conda 环境，如果后续启动时提示 `ModuleNotFoundError`（找不到某些模块），请直接通过 `pip install <缺失的包名>` 进行快速补充。
 
-## 🐍 2. 后端启动指南 (FastAPI)
+### 2.3 配置数据库连接
+打开 `finance-project/backend/database.py` 文件，找到数据库连接配置行，将账号密码修改为你本机的 MySQL 配置：
+`ASYNC_SQLALCHEMY_DATABASE_URL = "mysql+aiomysql://root:你的密码@127.0.0.1:3306/finance_db"`
 
-后端代码都在 `backend` 目录下。
+### 2.4 初始化数据库与测试数据（必做）
+为了方便快速体验项目，我们提供了一键初始化脚本。该脚本会自动创建所需的数据库表，并写入演示用的流水数据。
+请在后端目录下运行：
+`python init_database.py`
 
-### 第一次运行配置：
+**注意：** 脚本运行成功后，终端会打印出分配给你的**测试账号和密码**（例如：`testuser / 123456`）。请务必留意并保存，稍后在前端页面需要使用该账号登录。
 
-Bash
+### 2.5 启动后端
+环境和数据准备就绪后，启动 FastAPI 后端服务：
+`uvicorn main:app --reload`
 
-```
-cd backend
+后端启动后，可以通过浏览器访问接口文档来验证服务是否正常运行：
+* Swagger 接口文档：http://127.0.0.1:8000/docs
 
-# 1. 创建虚拟环境 (防止依赖冲突)
-python -m venv venv
+---
 
-# 2. 激活虚拟环境 (关键步骤！)
-# Windows系统执行:
-venv\Scripts\activate
-# Mac/Linux系统执行:
-# source venv/bin/activate
-# (激活成功后，命令行前面会出现 (venv) 字样)
+## 3. 前端服务部署
 
-# 3. 安装依赖包
-pip install -r requirements.txt
-```
+请**新开一个终端窗口**（保持后端终端继续运行），进入前端目录：
+`cd finance-project/frontend`
 
-### 数据库配置：
+安装前端依赖库：
+`npm install`
 
-1. 打开你的 MySQL 客户端，创建一个空数据库，名字叫 `finance_db`。
+启动前端开发服务器：
+`npm run dev`
 
-2. 打开代码文件 `backend/database.py`。
+启动成功后，在浏览器中访问控制台提供的本地地址（通常为）：
+* http://localhost:5173
 
-3. 修改 `SQLALCHEMY_DATABASE_URL` 这一行，填入你自己的数据库密码：
+打开网页后，输入第 2.4 步中获取的**测试账号和密码**即可登录体验系统。
 
-   Python
+---
 
-   ```
-   # 格式: mysql+pymysql://root:你的密码@localhost:3306/finance_db
-   ```
+## 4. 补充配置（可选）：短信验证码
+本项目集成了阿里云的短信验证码功能。如果不测试找回密码/短信登录等功能，可直接跳过此步。
 
-### 启动后端：
-
-确保虚拟环境已激活 `(venv)`，在 `backend` 目录下运行：
-
-Bash
-
-```
-uvicorn main:app --reload
-```
-
-- 看见 `Uvicorn running on http://127.0.0.1:8000` 即为成功。
-- **接口文档地址：** [http://127.0.0.1:8000/docs](https://www.google.com/search?q=http://127.0.0.1:8000/docs)
-
-## 🎨 3. 前端启动指南 (Vue 3)
-
-前端代码都在 `frontend` 目录下。需新开一个终端窗口。
-
-Bash
-
-```
-cd frontend
-
-# 1. 安装依赖 (第一次需要，或者package.json变动时需要)
-npm install
-
-# 2. 启动开发服务器
-npm run dev
-```
-
-- 访问地址：http://localhost:5173
-
-## 📦 数据导入/导出 (CSV/Excel)
-
-- 入口：设置页 -> 数据管理
-- 导出格式：CSV 或 Excel (.xlsx)
-- 导入格式：必须与导出一致（同一列头）
-- 登录要求：导入/导出必须登录后才能使用
-- 导入策略：
-  - merge: 追加导入（保留原有数据）
-  - replace: 清空后导入（覆盖原有数据）
-
-## 🤝 4. 团队协作规范 (必读！)
-
-为了防止代码冲突，请严格遵守以下流程：
-
-### 分支策略
-
-- `main`: **主分支** (严禁直接修改！仅用于最终演示)
-- `dev`: **开发总分支** (大家的稳定代码都合并到这里)
-- `feature/xxx`: **你的个人分支** (例如: `feature/login`, `feature/charts`)
-
-### 每日开发流程 (Daily Workflow)
-
-**1. 开始工作前 (更新代码)：**
-
-Bash
-
-```
-git checkout dev        # 切回开发分支
-git pull origin dev     # 拉取队友写的最新代码
-git checkout -b feature/你的功能名  # 新建一个分支开始干活
-```
-
-**2. 写代码中...**
-
-- 后端记得写 Type Hints。
-- 前端记得看后端 Swagger 文档。
-
-**3. 提交代码：**
-
-Bash
-
-```
-git add .
-git commit -m "feat: 完成了登录功能"  # 写清楚干了什么
-```
-
-**4. 合并代码 (推送到远端)：**
-
-- 先切回 dev 更新一下，防止冲突：
-
-  Bash
-
-  ```
-  git checkout dev
-  git pull origin dev
-  ```
-
-- 把你的功能合并进 dev：
-
-  Bash
-
-  ```
-  git merge feature/你的功能名
-  ```
-
-- 推送到 GitHub：
-
-  Bash
-
-  ```
-  git push origin dev
-  ```
-
-------
-
-## 🆘 常见问题 (FAQ)
-
-**Q: `pip install` 速度太慢？** A: 使用清华源加速： `pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple`
-
-**Q: 前端 `npm install` 报错？** A: 尝试删除 `node_modules` 文件夹和 `package-lock.json`，然后重新运行 `npm install`。
-
-**Q: 数据库连接报错 `Access denied`？** A: 检查 `backend/database.py` 里的密码是不是写错了，或者 MySQL 服务没启动。
+如需完整体验，后端会读取 `finance-project/backend/.env` 文件中的配置，请在根目录下新建 `.env` 文件并填入您自己的阿里云参数：
+* ALIBABA_CLOUD_ACCESS_KEY_ID
+* ALIBABA_CLOUD_ACCESS_KEY_SECRET
+* ALIBABA_CLOUD_SMS_TEMPLATE_CODE1
+* ALIBABA_CLOUD_SMS_TEMPLATE_PARAMS
+* ALIBABA_CLOUD_SMS_TEMPLATE_CODE5
