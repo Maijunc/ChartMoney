@@ -1,7 +1,7 @@
 // src/utils/dashboardLogic.js
 import { ref } from 'vue'
 import * as echarts from 'echarts'
-import { getBillListFirst } from '@/api/bill.js'
+import { getRecentBills } from '@/api/analysis.js'
 import { getTrendDays, getTrendMonths, getExpenseProportionMonth, getDashboardSummary } from '@/api/analysis.js'
 import { getBudgetListByMonth } from '@/api/budget.js'
 import { useUserStore } from '@/stores/user.js'
@@ -80,44 +80,20 @@ export default function useDashboardLogic() {
       expenseGrowth.value = data.growth.expense_growth
       balanceRate.value = data.growth.balance_growth
 
-      // 近期账单保持原有逻辑，后续优化
-      const currentMonth = getCurrentMonth()
-      const [incomeBills, expenseBills] = await Promise.all([
-        getBillListFirst({
-          user_id: userStore.userId,
-          the_time: currentMonth,
-          type: 1 // 1=收入
-        }),
-        getBillListFirst({
-          user_id: userStore.userId,
-          the_time: currentMonth,
-          type: 2 // 2=支出
-        })
-      ])
+      // 获取近期账单
+      const recentBillsResponse = await getRecentBills({
+        user_id: userStore.userId
+      })
 
-      // 合并所有账单用于近期账单显示
-      const allBills = [
-        ...(incomeBills?.data || []).map((bill) => ({
-          ...bill,
-          type: 'income',
-          category: '收入'
-        })),
-        ...(expenseBills?.data || []).map((bill) => ({
-          ...bill,
-          type: 'expense',
-          category: bill.category_name || '支出'
-        }))
-      ]
-
-      // 按日期排序，取最近的8条
-      allBills.sort(
-        (a, b) => new Date(b.bill_time || b.date) - new Date(a.bill_time || a.date)
-      )
-      recentBills.value = allBills.slice(0, 8).map((bill) => ({
-        date: (bill.bill_time || bill.date).split('T')[0],
-        category: bill.category,
+      // 后端返回的数据格式：
+      // [
+      //   { bill_time: "2026-03-12 14:30:00", category_name: "餐饮", amount: 50.00, type: 2, remark: "..." }
+      // ]
+      recentBills.value = (recentBillsResponse.data || []).map((bill) => ({
+        date: bill.bill_time.split(' ')[0], // 只取日期部分
+        category: bill.category_name,
         amount: parseFloat(bill.amount),
-        type: bill.type,
+        type: bill.type === 1 ? 'income' : 'expense', // 1=收入, 2=支出
         remark: bill.remark || '-'
       }))
     } catch (error) {
