@@ -62,7 +62,7 @@
           <el-menu-item index="data" @click="handleJumpToAnalysis()">
             <template #title>
               <el-icon><DataAnalysisIcon /></el-icon>
-              <span>消费年度总结</span>
+              <span>消费趋势</span>
             </template>
           </el-menu-item>
 

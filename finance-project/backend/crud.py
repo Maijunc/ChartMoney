@@ -1071,6 +1071,152 @@ async def get_recent_bills(user_id: int, db: AsyncSession):
     return result_list
 
 
+# 获取预算使用情况分析
+# 参数：user_id - 用户ID, month - 月份（YYYY-MM格式）
+# 返回值：
+#   - 成功：返回 (time, data)，data 包含预算列表和总预算信息
+#   - 失败：返回错误代码
+#     -1: 用户不存在
+#     -2: 月份格式错误
+#     0: 数据库异常
+async def get_budget_usage(user_id: int, month: str, db: AsyncSession):
+    # 1. 验证用户存在
+    stmt = select(User).filter(User.id == user_id)
+    try:
+        user = await db.scalar(stmt)
+    except Exception:
+        return 0
+    if user is None:
+        return -1
+
+    # 2. 验证月份格式
+    try:
+        start_time = datetime.strptime(f"{month}-01", "%Y-%m-%d")
+    except Exception:
+        return -2
+
+    # 3. 计算该月的起止时间
+    if start_time.month == 12:
+        end_time = start_time.replace(year=start_time.year + 1, month=1, day=1)
+    else:
+        end_time = start_time.replace(month=start_time.month + 1, day=1)
+
+    # 4. 查询该月的所有预算
+    try:
+        stmt = select(
+            Budget.id,
+            Budget.category_id,
+            Budget.is_total,
+            Budget.amount,
+            Budget.month
+        ).where(
+            (Budget.user_id == user_id) &
+            (Budget.month == month)
+        )
+        result = await db.execute(stmt)
+        budgets = result.all()
+    except Exception:
+        return 0
+
+    if not budgets:
+        # 用户没有设置预算
+        return month, {
+            "has_budget": False,
+            "total_budget": 0,
+            "total_used": 0,
+            "budget_list": []
+        }
+
+    # 5. 查询该月的实际支出
+    try:
+        stmt = select(
+            Bill.category_id,
+            func.sum(Bill.amount).label("total_amount")
+        ).join(
+            Bill_Category, Bill.category_id == Bill_Category.id
+        ).filter(
+            (Bill.user_id == user_id) &
+            (Bill_Category.type == 2) &  # 只统计支出
+            (Bill.bill_time >= start_time) &
+            (Bill.bill_time < end_time)
+        ).group_by(Bill.category_id)
+
+        result = await db.execute(stmt)
+        expenses = result.all()
+    except Exception:
+        return 0
+
+    # 6. 构建分类支出字典
+    expense_dict = {}
+    total_expense = 0.0
+    for expense in expenses:
+        expense_dict[expense.category_id] = float(expense.total_amount or 0)
+        total_expense += float(expense.total_amount or 0)
+
+    # 7. 整合预算和支出数据
+    budget_list = []
+    total_budget = 0.0
+    total_budget_item = None
+
+    for budget in budgets:
+        if budget.is_total:
+            # 总预算
+            total_budget = float(budget.amount)
+            total_budget_item = {
+                "id": budget.id,
+                "name": "本月总预算",
+                "category_id": None,
+                "is_total": True,
+                "budget_amount": float(budget.amount),
+                "used_amount": total_expense,
+                "remaining_amount": float(budget.amount) - total_expense,
+                "usage_rate": (total_expense / float(budget.amount) * 100) if float(budget.amount) > 0 else 0,
+                "status": "over" if total_expense > float(budget.amount) else "normal"
+            }
+        else:
+            # 分类预算
+            used = expense_dict.get(budget.category_id, 0.0)
+            budget_amount = float(budget.amount)
+            usage_rate = (used / budget_amount * 100) if budget_amount > 0 else 0
+
+            # 获取分类名称
+            try:
+                stmt_cat = select(Bill_Category.name).where(Bill_Category.id == budget.category_id)
+                category_name = await db.scalar(stmt_cat)
+                name = category_name if category_name else "未知分类"
+            except Exception:
+                name = "未知分类"
+
+            budget_list.append({
+                "id": budget.id,
+                "name": name,
+                "category_id": budget.category_id,
+                "is_total": False,
+                "budget_amount": budget_amount,
+                "used_amount": used,
+                "remaining_amount": budget_amount - used,
+                "usage_rate": usage_rate,
+                "status": "over" if used > budget_amount else "normal"
+            })
+
+    # 按使用率降序排列
+    budget_list.sort(key=lambda x: x["usage_rate"], reverse=True)
+
+    # 8. 构建返回数据
+    result_data = {
+        "has_budget": True,
+        "total_budget": total_budget,
+        "total_used": total_expense,
+        "total_remaining": total_budget - total_expense,
+        "total_usage_rate": (total_expense / total_budget * 100) if total_budget > 0 else 0,
+        "total_status": "over" if total_expense > total_budget else "normal",
+        "total_info": total_budget_item,
+        "budget_list": budget_list
+    }
+
+    return month, result_data
+
+
 # 消费列别占比（单个月，month=-1时为全部，month=0时为当月，month=1时为上个月，以此类推，最多往后推12个月）
 async def get_propotion_month(user_id: int, month: int, db: AsyncSession):
     # 1. 验证用户存在

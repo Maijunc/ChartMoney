@@ -730,6 +730,39 @@ async def get_propotion_month(user_id: int = Query(..., ge=1),
         }
 
 
+# 预算使用情况分析
+@app.get("/analysis/budget_usage")
+async def budget_usage(user_id: int = Query(..., ge=1),
+                       month: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
+                       db: AsyncSession = Depends(database.get_db)
+                       ):
+    """
+    获取某月的预算使用情况分析
+    参数：
+    - user_id: 用户ID
+    - month: 月份，格式为 YYYY-MM
+    """
+    result = await crud.get_budget_usage(user_id, month, db)
+
+    if result == 0:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
+    elif result == -1:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="该用户不存在")
+    elif result == -2:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="月份格式错误")
+    else:
+        time, data = result
+        return {
+            "code": status.HTTP_200_OK,
+            "message": "成功",
+            "time": time,
+            "data": data
+        }
+
+
+
+
+
 # 导出用户数据（CSV/Excel，需登录）
 @app.get("/user/export")
 async def export_user_data(
