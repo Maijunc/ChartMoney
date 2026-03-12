@@ -852,8 +852,10 @@ const handleSizeChange = async (val) => {
   pageSize.value = val
   currentPage.value = 1 // 切换每页条数时重置页码
 
-  // 如果是搜索状态，不重新请求后端
-  if (!isSearching.value) {
+  // 根据状态调用不同的加载函数
+  if (isSearching.value) {
+    await handleSearch()
+  } else {
     await initIncomeData()
   }
 }
@@ -861,99 +863,67 @@ const handleSizeChange = async (val) => {
 const handleCurrentChange = async (val) => {
   currentPage.value = val
 
-  // 如果是搜索状态，不重新请求后端
-  if (!isSearching.value) {
+  // 根据状态调用不同的加载函数
+  if (isSearching.value) {
+    await handleSearch()
+  } else {
     await initIncomeData()
   }
 }
 
 // 修复点9：完善搜索逻辑（关键修复：使用 originIncomeList 作为数据源 + 排序）
-const handleSearch = () => {
+const handleSearch = async () => {
   console.log('搜索条件：', searchForm.value)
   // 重置页码
   currentPage.value = 1
   // 设置为搜索状态
   isSearching.value = true
 
-  // 关键修复：从原始数据拷贝，而非筛选后的数据
-  let filteredData = JSON.parse(JSON.stringify(originIncomeList.value))
-
-  // 1.  ========== 动态日期筛选逻辑 ==========
-  if (searchForm.value.dateType && searchForm.value.dateValue) {
-    const dateType = searchForm.value.dateType
-    const dateValue = searchForm.value.dateValue
-
-    switch (dateType) {
-      case 'day':
-        // 按日筛选
-        filteredData = filteredData.filter((item) => item.date === dateValue)
-        break
-
-      case 'month':
-        // 按月筛选
-        filteredData = filteredData.filter((item) => {
-          return item.date.startsWith(dateValue) // YYYY-MM 开头
-        })
-        break
-
-      case 'year':
-        // 按年筛选
-        filteredData = filteredData.filter((item) => {
-          return item.date.startsWith(dateValue) // YYYY 开头
-        })
-        break
+  try {
+    const params = {
+      user_id: userStore.userId,
+      the_time: null, // 搜索时不使用月份筛选
+      page: currentPage.value,
+      page_size: 15,
+      type: 1, // 收入类型
+      // 筛选参数
+      date_type: searchForm.value.dateType || null,
+      date_value: searchForm.value.dateValue || null,
+      category_name: searchForm.value.type || null,
+      payment_method_name: searchForm.value.paymentMethod || null,
+      amount: searchForm.value.amount ? Number(searchForm.value.amount) : null,
+      name_keyword: searchForm.value.source || null,
+      remark_keyword: searchForm.value.remark || null
     }
-  }
 
-  // 2. 收入类型筛选
-  if (searchForm.value.type) {
-    filteredData = filteredData.filter((item) => item.ctype === searchForm.value.type)
-  }
+    const res = await getBillList(params)
+    if (res.code === 200) {
+      // 使用 BillTransformer 转换后端返回的数据，与 initIncomeData 逻辑一致
+      const convertedData = res.data.map(billData => {
+        const categoryName = billData.category_name || '其他'
+        const paymentMethodName = billData.method_name || '未知'
 
-  // 3. 支付方式筛选（新增）
-  if (searchForm.value.paymentMethod) {
-    filteredData = filteredData.filter((item) => item.paymentMethod === searchForm.value.paymentMethod)
-  }
+        const incomeData = BillTransformer.backendToIncome(billData, categoryName)
 
-  // 4. 收入金额筛选（精确匹配）
-  if (searchForm.value.amount) {
-    const targetAmount = Number(searchForm.value.amount)
-    filteredData = filteredData.filter(
-      (item) => Math.abs(Number(item.amount) - targetAmount) < 0.01,
-    )
-  }
-
-  // 5. 收入来源筛选（模糊匹配）
-  if (searchForm.value.source) {
-    const keyword = searchForm.value.source.trim()
-    filteredData = filteredData.filter((item) => item.source.includes(keyword))
-  }
-
-  // 6. 备注筛选（模糊匹配 - 优化版）
-  if (searchForm.value.remark) {
-    const keyword = searchForm.value.remark.trim().toLowerCase()
-
-    // 如果用户搜索"无"，则查找备注为空或为"无"的记录
-    if (keyword === '无') {
-      filteredData = filteredData.filter((item) => {
-        const remarkValue = item.remark || ''
-        return remarkValue === '' || remarkValue === '无'
+        // 添加前端需要的额外字段
+        return {
+          ...incomeData,
+          bill_id: billData.id,  // 保存账单ID用于修改和删除
+          category_id: billData.category_id,
+          method_id: billData.method_id,
+          paymentMethod: paymentMethodName
+        }
       })
+
+      incomeList.value = convertedData
+      totalIncome.value = res.total
     } else {
-      // 普通模糊匹配（大小写不敏感）
-      filteredData = filteredData.filter((item) => {
-        const remarkValue = (item.remark || '').toLowerCase()
-        return remarkValue.includes(keyword)
-      })
+      ElMessage.error('搜索失败')
     }
+  } catch (error) {
+    console.error('搜索失败：', error)
+    ElMessage.error('搜索失败')
   }
-
-  // ========== 核心修改：搜索结果按日期降序排列 ==========
-  const sortedFilteredData = sortDataByDate(filteredData)
-
-  // 更新筛选后的数据
-  incomeList.value = sortedFilteredData
-  totalIncome.value = sortedFilteredData.length
 }
 
 // 修复点10：重置搜索表单（关键修复：恢复原始数据 + 排序）

@@ -734,14 +734,18 @@ const pagedExpenseList = computed(() => {
 const handleSizeChange = async (val) => {
   pageSize.value = val
   currentPage.value = 1
-  if (!isSearching.value) {
+  if (isSearching.value) {
+    await handleSearch()
+  } else {
     await initExpenseData()
   }
 }
 
 const handleCurrentChange = async (val) => {
   currentPage.value = val
-  if (!isSearching.value) {
+  if (isSearching.value) {
+    await handleSearch()
+  } else {
     await initExpenseData()
   }
 }
@@ -961,63 +965,56 @@ const trimInputValue = (row, field) => {
 }
 
 // 搜索/筛选（前端筛选 originExpenseList）
-const handleSearch = () => {
+const handleSearch = async () => {
   currentPage.value = 1
   isSearching.value = true
 
-  let filteredData = JSON.parse(JSON.stringify(originExpenseList.value))
-
-  // 1) 动态日期筛选
-  if (searchForm.value.dateType && searchForm.value.dateValue) {
-    const { dateType, dateValue } = searchForm.value
-
-    if (dateType === 'day') {
-      filteredData = filteredData.filter((item) => item.time === dateValue)
-    } else if (dateType === 'month') {
-      filteredData = filteredData.filter((item) => (item.time || '').startsWith(dateValue))
-    } else if (dateType === 'year') {
-      filteredData = filteredData.filter((item) => (item.time || '').startsWith(dateValue))
+  try {
+    const params = {
+      user_id: userStore.userId,
+      the_time: null, // 搜索时不使用月份筛选
+      page: currentPage.value,
+      page_size: 15,
+      type: 2, // 支出类型
+      // 筛选参数
+      date_type: searchForm.value.dateType || null,
+      date_value: searchForm.value.dateValue || null,
+      category_name: searchForm.value.type || null,
+      payment_method_name: searchForm.value.paymentMethod || null,
+      amount: searchForm.value.amount ? Number(searchForm.value.amount) : null,
+      name_keyword: searchForm.value.name || null,
+      remark_keyword: searchForm.value.remark || null
     }
-  }
 
-  // 2) 消费种类
-  if (searchForm.value.type) {
-    filteredData = filteredData.filter((item) => item.type === searchForm.value.type)
-  }
+    const res = await getBillList(params)
+    if (res.code === 200) {
+      // 使用 BillTransformer 转换后端返回的数据，与 initExpenseData 逻辑一致
+      const convertedData = res.data.map((billData, index) => {
+        const categoryName = billData.category_name || '其他'
+        const paymentMethodName = billData.method_name || '未知'
 
-  // 3) 支付方式
-  if (searchForm.value.paymentMethod) {
-    filteredData = filteredData.filter((item) => item.paymentMethod === searchForm.value.paymentMethod)
-  }
+        const expenseData = BillTransformer.backendToExpense(billData, categoryName)
 
-  // 4) 金额（允许 money 为 string/number）
-  if (searchForm.value.amount) {
-    const target = Number(searchForm.value.amount)
-    filteredData = filteredData.filter((item) => Math.abs(Number(item.money) - target) < 0.01)
-  }
-
-  // 5) 消费名称（模糊）
-  if (searchForm.value.name) {
-    const keyword = searchForm.value.name.trim()
-    filteredData = filteredData.filter((item) => (item.name || '').includes(keyword))
-  }
-
-  // 6) 备注（模糊；"无" 特判）
-  if (searchForm.value.remark) {
-    const keyword = searchForm.value.remark.trim().toLowerCase()
-    if (keyword === '无') {
-      filteredData = filteredData.filter((item) => {
-        const v = item.extra || ''
-        return v === '' || v === '无'
+        return {
+          ...expenseData,
+          row_id: expenseData.id ?? index + 1,
+          bill_id: billData.id,
+          category_id: billData.category_id,
+          method_id: billData.method_id,
+          paymentMethod: paymentMethodName,
+          iconName: iconMap[categoryName] || 'Food'
+        }
       })
-    } else {
-      filteredData = filteredData.filter((item) => ((item.extra || '').toLowerCase()).includes(keyword))
-    }
-  }
 
-  const sorted = sortDataByDate(filteredData)
-  expenseList.value = sorted
-  totalExpense.value = sorted.length
+      expenseList.value = convertedData
+      totalExpense.value = res.total
+    } else {
+      ElMessage.error('搜索失败')
+    }
+  } catch (error) {
+    console.error('搜索失败：', error)
+    ElMessage.error('搜索失败')
+  }
 }
 
 // 重置搜索

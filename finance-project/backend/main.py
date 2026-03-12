@@ -452,12 +452,15 @@ async def bill_batch_delete(payload: schemas.bill_batch_delete, db: AsyncSession
 
 # 获取账单列表
 @app.get("/bill/list")
-async def bill_list(user_id: int, page:int, page_size: int, type: int, the_time: str = None, db: AsyncSession = Depends(database.get_db)):
+async def bill_list(user_id: int, page:int, page_size: int, type: int, the_time: str = None,
+                   date_type: str = None, date_value: str = None, category_name: str = None,
+                   payment_method_name: str = None, amount: float = None, name_keyword: str = None,
+                   remark_keyword: str = None, db: AsyncSession = Depends(database.get_db)):
     if page_size <15:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="页面大小太小")
     if type not in [1, 2]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="type参数输入错误")
-    
+
     # 如果传递了 the_time，验证月份是否有效（1-12月）
     if the_time:
         try:
@@ -469,8 +472,10 @@ async def bill_list(user_id: int, page:int, page_size: int, type: int, the_time:
                 raise ValueError
         except ValueError:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不正确的日期格式")
-    
-    temp = await crud.get_bill_count(user_id, the_time, page_size, type, db)
+
+    temp = await crud.get_bill_count(user_id, the_time, page_size, type, db,
+                                     date_type, date_value, category_name, payment_method_name,
+                                     amount, name_keyword, remark_keyword)
     if temp == 0:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
     elif temp == -1:
@@ -489,7 +494,9 @@ async def bill_list(user_id: int, page:int, page_size: int, type: int, the_time:
     if page < 1 or page > page_num:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="页号输入错误（为负数或是过大）")
 
-    result = await crud.bill_list(user_id, the_time, page, page_size, type, db)
+    result = await crud.bill_list(user_id, the_time, page, page_size, type, db,
+                                  date_type, date_value, category_name, payment_method_name,
+                                  amount, name_keyword, remark_keyword)
     if result == 0:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
     else:

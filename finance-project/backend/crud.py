@@ -361,7 +361,10 @@ async def bill_batch_delete(payload: schemas.bill_batch_delete, db: AsyncSession
 
 
 # 用于获取账单
-async def bill_list(user_id: int, the_time: str, page: int, page_size: int, type: int, db: AsyncSession):
+async def bill_list(user_id: int, the_time: str, page: int, page_size: int, type: int, db: AsyncSession,
+                    date_type: str = None, date_value: str = None, category_name: str = None,
+                    payment_method_name: str = None, amount: float = None, name_keyword: str = None,
+                    remark_keyword: str = None):
     # 计算偏移量
     skip = (page - 1) * page_size
 
@@ -387,13 +390,13 @@ async def bill_list(user_id: int, the_time: str, page: int, page_size: int, type
             Payment_Method,
             Payment_Method.id == Bill.method_id
         )
-        
+
         # 添加基础条件
         conditions = [
             (Bill.user_id == user_id),
             (Bill_Category.type == type)
         ]
-        
+
         # 如果传递了 the_time，添加时间过滤条件
         if the_time:
             start_time = datetime.strptime(f"{the_time}-01", "%Y-%m-%d")
@@ -401,12 +404,42 @@ async def bill_list(user_id: int, the_time: str, page: int, page_size: int, type
                 end_time = start_time.replace(year=start_time.year + 1, month=1, day=1)
             else:
                 end_time = start_time.replace(month=start_time.month + 1, day=1)
-            
+
             conditions.extend([
                 (Bill.bill_time >= start_time),
                 (Bill.bill_time < end_time)
             ])
-        
+
+        # 添加筛选条件
+        # 1) 动态日期筛选（优先级高于 the_time）
+        if date_type and date_value:
+            if date_type == 'day':
+                conditions.append(Bill.bill_time == datetime.strptime(date_value, "%Y-%m-%d"))
+            elif date_type == 'month':
+                conditions.append(Bill.bill_time.like(f"{date_value}%"))
+            elif date_type == 'year':
+                conditions.append(Bill.bill_time.like(f"{date_value}%"))
+
+        # 2) 分类名称筛选
+        if category_name:
+            conditions.append(Bill_Category.name == category_name)
+
+        # 3) 支付方式筛选
+        if payment_method_name:
+            conditions.append(Payment_Method.name == payment_method_name)
+
+        # 4) 金额筛选
+        if amount is not None:
+            conditions.append(Bill.amount == amount)
+
+        # 5) 名称关键字筛选
+        if name_keyword:
+            conditions.append(Bill.name.like(f"%{name_keyword}%"))
+
+        # 6) 备注关键字筛选
+        if remark_keyword:
+            conditions.append(Bill.remark.like(f"%{remark_keyword}%"))
+
         # 应用所有条件
         stmt = stmt.where(*conditions).order_by(desc(Bill.bill_time)).offset(skip).limit(page_size)
         the_list = await db.execute(stmt)
@@ -435,7 +468,10 @@ async def bill_list(user_id: int, the_time: str, page: int, page_size: int, type
 
 
 # 用于获取账单记录条数和分页总数
-async def get_bill_count(user_id: int, the_time: str, page_size: int, type: int, db: AsyncSession):
+async def get_bill_count(user_id: int, the_time: str, page_size: int, type: int, db: AsyncSession,
+                        date_type: str = None, date_value: str = None, category_name: str = None,
+                        payment_method_name: str = None, amount: float = None, name_keyword: str = None,
+                        remark_keyword: str = None):
     stmt = select(User.id).where(User.id == user_id)
     check = await db.scalar(stmt)
     if check is None:
@@ -447,6 +483,9 @@ async def get_bill_count(user_id: int, the_time: str, page_size: int, type: int,
         stmt = select(func.count(Bill.id)).join(
             Bill_Category,
             Bill.category_id == Bill_Category.id
+        ).join(
+            Payment_Method,
+            Payment_Method.id == Bill.method_id
         )
 
         # 添加基础条件
@@ -467,6 +506,36 @@ async def get_bill_count(user_id: int, the_time: str, page_size: int, type: int,
                 (Bill.bill_time >= start_time),
                 (Bill.bill_time < end_time)
             ])
+
+        # 添加筛选条件（与 bill_list 保持一致）
+        # 1) 动态日期筛选（优先级高于 the_time）
+        if date_type and date_value:
+            if date_type == 'day':
+                conditions.append(Bill.bill_time == datetime.strptime(date_value, "%Y-%m-%d"))
+            elif date_type == 'month':
+                conditions.append(Bill.bill_time.like(f"{date_value}%"))
+            elif date_type == 'year':
+                conditions.append(Bill.bill_time.like(f"{date_value}%"))
+
+        # 2) 分类名称筛选
+        if category_name:
+            conditions.append(Bill_Category.name == category_name)
+
+        # 3) 支付方式筛选
+        if payment_method_name:
+            conditions.append(Payment_Method.name == payment_method_name)
+
+        # 4) 金额筛选
+        if amount is not None:
+            conditions.append(Bill.amount == amount)
+
+        # 5) 名称关键字筛选
+        if name_keyword:
+            conditions.append(Bill.name.like(f"%{name_keyword}%"))
+
+        # 6) 备注关键字筛选
+        if remark_keyword:
+            conditions.append(Bill.remark.like(f"%{remark_keyword}%"))
 
         # 应用所有条件
         stmt = stmt.where(*conditions)

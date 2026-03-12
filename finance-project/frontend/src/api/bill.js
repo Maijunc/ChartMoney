@@ -105,6 +105,13 @@ export function batchDeleteBill(data) {
  * @param {number} params.page - 页码（从1开始）
  * @param {number} params.page_size - 每页条数（最小15）
  * @param {number} params.type - 类型：1=收入，2=支出
+ * @param {string} params.date_type - 日期筛选类型：day/month/year（可选）
+ * @param {string} params.date_value - 日期值（可选）
+ * @param {string} params.category_name - 分类名称（可选）
+ * @param {string} params.payment_method_name - 支付方式名称（可选）
+ * @param {number} params.amount - 金额（可选）
+ * @param {string} params.name_keyword - 名称关键字（可选）
+ * @param {string} params.remark_keyword - 备注关键字（可选）
  * @returns {Promise}
  */
 export function getBillList(params) {
@@ -116,7 +123,14 @@ export function getBillList(params) {
       the_time: params.the_time,
       page: params.page,
       page_size: params.page_size,
-      type: params.type
+      type: params.type,
+      date_type: params.date_type,
+      date_value: params.date_value,
+      category_name: params.category_name,
+      payment_method_name: params.payment_method_name,
+      amount: params.amount,
+      name_keyword: params.name_keyword,
+      remark_keyword: params.remark_keyword
     }
   })
 }
