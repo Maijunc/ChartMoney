@@ -12,9 +12,6 @@ import security  # 导入安全工具模块
 
 
 # 用于用户登录时，查看用户名和密码是否正确
-# 返回值说明：
-#   - 成功：返回用户对象
-#   - 失败：返回 None (用户不存在或密码错误)
 async def user_login(user: schemas.User, db: AsyncSession):
     result = await db.execute(select(User).where((User.username == user.username)))
     select_user = result.scalar_one_or_none()
@@ -69,12 +66,6 @@ async def get_user_info_by_phone(phone: str, db: AsyncSession):
 
 
 # 用于修改密码（通过手机验证码验证）
-# 返回值说明：
-#   - 成功：返回更新后的用户对象 (User)
-#   - 失败：返回错误代码
-#     -1: 用户不存在
-#     -2: 验证码验证失败
-#     0: 数据库异常
 async def user_change_password(phone: str, new_password: str, db: AsyncSession):
     # 查找用户
     stmt = select(User).where(User.phone == phone)
@@ -97,12 +88,6 @@ async def user_change_password(phone: str, new_password: str, db: AsyncSession):
 
 
 # 用于用户的注册
-# 返回值说明：
-#   - 成功：返回新创建的用户对象 (User)
-#   - 失败：返回错误代码
-#     -1: 用户名已存在
-#     -2: 手机号已注册
-#     0: 数据库异常
 async def user_register(user: schemas.User_register, db: AsyncSession):
     check = await db.execute(select(User).where((User.username == user.username)))
     check = check.scalar_one_or_none()
@@ -131,13 +116,6 @@ async def user_register(user: schemas.User_register, db: AsyncSession):
 
 
 # 用于更新用户信息
-# 返回值说明：
-#   - 成功：返回更新后的用户对象 (User)
-#   - 失败：返回错误代码
-#     -1: 用户不存在
-#     -2: 手机号已被其他用户使用
-#     -3: 邮箱已被其他用户使用
-#     0: 数据库异常
 async def user_update(user_id: int, user_data: schemas.User_update, db: AsyncSession):
     # 查找用户
     stmt = select(User).where(User.id == user_id)
@@ -1072,13 +1050,6 @@ async def get_recent_bills(user_id: int, db: AsyncSession):
 
 
 # 获取预算使用情况分析
-# 参数：user_id - 用户ID, month - 月份（YYYY-MM格式）
-# 返回值：
-#   - 成功：返回 (time, data)，data 包含预算列表和总预算信息
-#   - 失败：返回错误代码
-#     -1: 用户不存在
-#     -2: 月份格式错误
-#     0: 数据库异常
 async def get_budget_usage(user_id: int, month: str, db: AsyncSession):
     # 1. 验证用户存在
     stmt = select(User).filter(User.id == user_id)
@@ -1341,4 +1312,131 @@ async def get_propotion_month(user_id: int, month: int, db: AsyncSession):
 
     # 7. 返回结构化的结果
     return period_description, category_data
+
+
+# 获取支付方式分布
+async def get_payment_method_distribution(user_id: int, month: str, db: AsyncSession):
+    # 1. 验证用户存在
+    stmt = select(User).filter(User.id == user_id)
+    try:
+        user = await db.scalar(stmt)
+    except Exception:
+        return 0
+    if user is None:
+        return -1
+
+    # 2. 构建时间范围
+    if month == "all" or month == "-1":
+        # 查询全部历史数据
+        start_date = None
+        end_date = None
+        period_description = "全部历史"
+    else:
+        # 验证月份格式
+        try:
+            start_time = datetime.strptime(f"{month}-01", "%Y-%m-%d")
+        except Exception:
+            return -2
+
+        # 计算该月的起止时间
+        if start_time.month == 12:
+            end_time = start_time.replace(year=start_time.year + 1, month=1, day=1)
+        else:
+            end_time = start_time.replace(month=start_time.month + 1, day=1)
+
+        start_date = start_time
+        end_date = end_time
+        period_description = month
+
+    # 3. 查询支付方式的消费统计（只统计支出）
+    try:
+        stmt = select(
+            Payment_Method.id.label("method_id"),
+            Payment_Method.name.label("method_name"),
+            func.sum(Bill.amount).label("total_amount"),
+            func.count(Bill.id).label("bill_count")
+        ).join(
+            Bill, Payment_Method.id == Bill.method_id
+        ).join(
+            Bill_Category, Bill.category_id == Bill_Category.id
+        ).filter(
+            Bill.user_id == user_id,
+            Bill_Category.type == 2  # 只统计支出
+        )
+
+        # 添加时间过滤（如果不是全部历史）
+        if start_date and end_date:
+            stmt = stmt.filter(
+                Bill.bill_time >= start_date,
+                Bill.bill_time < end_date
+            )
+
+        # 按支付方式分组
+        stmt = stmt.group_by(
+            Payment_Method.id,
+            Payment_Method.name
+        ).order_by(
+            func.sum(Bill.amount).desc()  # 按金额降序排列
+        )
+
+        result = await db.execute(stmt)
+        results = result.all()
+    except Exception:
+        return 0
+
+    # 4. 处理查询结果
+    method_data = []
+    total_amount = 0.0
+    total_bills = 0
+
+    for row in results:
+        amount = float(row.total_amount or 0)
+        count = row.bill_count or 0
+
+        method_data.append({
+            "method_id": row.method_id,
+            "method_name": row.method_name,
+            "amount": amount,
+            "count": count
+        })
+
+        total_amount += amount
+        total_bills += count
+
+    # 5. 计算占比
+    for item in method_data:
+        if total_amount > 0:
+            item["percentage"] = round((item["amount"] / total_amount) * 100, 2)
+            item["proportion"] = f"{item['percentage']}%"
+        else:
+            item["percentage"] = 0.0
+            item["proportion"] = "0%"
+
+    # 6. 处理没有消费数据的情况
+    if total_amount == 0:
+        # 尝试获取所有支付方式（即使没有消费）
+        result = await db.execute(
+            select(Payment_Method.id, Payment_Method.name)
+            .order_by(Payment_Method.id)
+        )
+        all_methods = result.all()
+
+        for method in all_methods:
+            method_data.append({
+                "method_id": method.id,
+                "method_name": method.name,
+                "amount": 0.0,
+                "count": 0,
+                "percentage": 0.0,
+                "proportion": "0%"
+            })
+
+    # 7. 返回结构化的结果
+    result_data = {
+        "total_amount": total_amount,
+        "total_bills": total_bills,
+        "method_list": method_data
+    }
+
+    return period_description, result_data
 

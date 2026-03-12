@@ -72,3 +72,39 @@ export function getExpenseProportionMonth(params) {
     }
   })
 }
+
+/**
+ * 获取预算使用情况分析
+ * @param {Object} params
+ * @param {number} params.user_id - 用户ID
+ * @param {string} params.month - 月份（YYYY-MM格式）
+ * @returns {Promise}
+ */
+export function getBudgetUsage(params) {
+  return request({
+    url: '/analysis/budget_usage',
+    method: 'get',
+    params: {
+      user_id: params.user_id,
+      month: params.month
+    }
+  })
+}
+
+/**
+ * 获取支付方式分布分析
+ * @param {Object} params
+ * @param {number} params.user_id - 用户ID
+ * @param {string} params.month - 月份（YYYY-MM格式）或 "-1"（全部历史）
+ * @returns {Promise}
+ */
+export function getPaymentMethodDistribution(params) {
+  return request({
+    url: '/analysis/payment_method_distribution',
+    method: 'get',
+    params: {
+      user_id: params.user_id,
+      month: params.month
+    }
+  })
+}

@@ -205,6 +205,66 @@
                 </div>
               </div>
             </div>
+
+            <div class="card chart-card">
+              <div class="card-header">
+                <h3>支付方式分布</h3>
+                <select class="time-selector" v-model="paymentMethodMonth" @change="fetchPaymentMethodDistribution">
+                  <option v-for="month in monthOptions" :key="month" :value="month">
+                    {{ month }}
+                  </option>
+                  <option value="-1">全部历史</option>
+                </select>
+              </div>
+              <div class="card-body">
+                <div v-if="paymentMethodData.method_list && paymentMethodData.method_list.length > 0" style="margin-bottom: 20px">
+                  <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px">
+                    <div class="budget-stat-card">
+                      <div class="stat-label">总笔数</div>
+                      <div class="stat-value">{{ paymentMethodData.total_bills }}笔</div>
+                    </div>
+                    <div class="budget-stat-card">
+                      <div class="stat-label">总金额</div>
+                      <div class="stat-value">¥{{ paymentMethodData.total_amount?.toFixed(2) }}</div>
+                    </div>
+                    <div class="budget-stat-card">
+                      <div class="stat-label">支付方式数</div>
+                      <div class="stat-value">{{ paymentMethodData.method_list.length }}种</div>
+                    </div>
+                  </div>
+
+                  <div id="payment-method-chart" class="chart"></div>
+
+                  <div v-if="paymentMethodData.method_list && paymentMethodData.method_list.length > 0" style="margin-top: 20px">
+                    <h4 style="margin-bottom: 15px">支付方式详情</h4>
+                    <div class="payment-method-list">
+                      <div
+                        v-for="item in paymentMethodData.method_list"
+                        :key="item.method_id"
+                        class="payment-method-item"
+                      >
+                        <div class="payment-method-item-header">
+                          <span class="payment-method-name">{{ item.method_name }}</span>
+                          <span class="payment-method-percentage">{{ item.percentage.toFixed(1) }}%</span>
+                        </div>
+                        <el-progress
+                          :percentage="item.percentage"
+                          :stroke-width="8"
+                          :color="getPaymentMethodColor(item.percentage)"
+                        />
+                        <div class="payment-method-item-detail">
+                          <span>金额: ¥{{ item.amount.toFixed(2) }}</span>
+                          <span>笔数: {{ item.count }}笔</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="no-budget">
+                  <el-empty description="暂无支付方式数据"></el-empty>
+                </div>
+              </div>
+            </div>
           </section>
 
           <!-- 页脚 -->
@@ -226,7 +286,7 @@ import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user.js'
 import useDashboardLogic from '@/stores/dashboardLogic.js'
 import PageTagsNav from '@/components/PageTagsNav.vue'
-import { getBudgetUsage } from '@/api/budget'
+import { getBudgetUsage, getPaymentMethodDistribution } from '@/api/analysis'
 import * as echarts from 'echarts'
 
 // 路由跳转逻辑
@@ -286,6 +346,15 @@ const budgetData = ref({
   budget_list: []
 })
 let budgetChart = null
+
+// ========== 支付方式分布 ==========
+const paymentMethodMonth = ref('')
+const paymentMethodData = ref({
+  method_list: [],
+  total_amount: 0,
+  total_bills: 0
+})
+let paymentMethodChart = null
 
 // 生成最近12个月的选项
 const generateMonthOptions = () => {
@@ -393,6 +462,93 @@ const goToBudgetPage = () => {
   router.push('/budget')
 }
 
+// 获取支付方式分布
+const fetchPaymentMethodDistribution = async () => {
+  if (!paymentMethodMonth.value && paymentMethodMonth.value !== '-1') return
+
+  try {
+    const res = await getPaymentMethodDistribution({
+      user_id: userStore.userId,
+      month: paymentMethodMonth.value
+    })
+
+    if (res.code === 200) {
+      paymentMethodData.value = res.data
+      if (res.data.method_list && res.data.method_list.length > 0) {
+        initPaymentMethodChart()
+      }
+    }
+  } catch (e) {
+    console.error('获取支付方式分布失败:', e)
+  }
+}
+
+// 初始化支付方式分布图表
+const initPaymentMethodChart = () => {
+  const chartDom = document.getElementById('payment-method-chart')
+  if (!chartDom) return
+
+  if (paymentMethodChart) {
+    paymentMethodChart.dispose()
+  }
+
+  paymentMethodChart = echarts.init(chartDom)
+
+  const option = {
+    tooltip: {
+      trigger: 'item',
+      formatter: '{a} <br/>{b}: ¥{c} ({d}%)'
+    },
+    legend: {
+      orient: 'vertical',
+      left: 'left',
+      top: 'center'
+    },
+    series: [
+      {
+        name: '支付方式分布',
+        type: 'pie',
+        radius: ['40%', '70%'],
+        avoidLabelOverlap: false,
+        itemStyle: {
+          borderRadius: 10,
+          borderColor: '#fff',
+          borderWidth: 2
+        },
+        label: {
+          show: false,
+          position: 'center'
+        },
+        emphasis: {
+          label: {
+            show: true,
+            fontSize: 20,
+            fontWeight: 'bold'
+          }
+        },
+        labelLine: {
+          show: false
+        },
+        data: paymentMethodData.value.method_list.map(item => ({
+          name: item.method_name,
+          value: item.amount
+        }))
+      }
+    ],
+    color: ['#409EFF', '#67C23A', '#E6A23C', '#F56C6C', '#909399', '#606266']
+  }
+
+  paymentMethodChart.setOption(option)
+}
+
+// 获取支付方式进度条颜色
+const getPaymentMethodColor = (percentage) => {
+  if (percentage >= 40) return '#409EFF'
+  if (percentage >= 20) return '#67C23A'
+  if (percentage >= 10) return '#E6A23C'
+  return '#F56C6C'
+}
+
 // 监听预算月份变化
 watch(budgetMonth, (newValue) => {
   console.log('预算月份变化:', newValue)
@@ -425,6 +581,14 @@ watch(budgetMonth, (newValue) => {
   }
 })
 
+// 监听支付方式月份变化
+watch(paymentMethodMonth, (newValue) => {
+  console.log('支付方式月份变化:', newValue)
+  if (newValue !== undefined) {
+    fetchPaymentMethodDistribution()
+  }
+})
+
 
 // 页面挂载初始化图表
 onMounted(() => {
@@ -438,6 +602,7 @@ onMounted(() => {
   // 生成月份选项并设置默认值
   monthOptions.value = generateMonthOptions()
   budgetMonth.value = monthOptions.value[0]
+  paymentMethodMonth.value = monthOptions.value[0]
 
   // 增加DOM存在性判断，防止图表初始化失败
   setTimeout(() => {
@@ -445,6 +610,7 @@ onMounted(() => {
     initMonthTrendChart()
     initCategoryChart()
     fetchBudgetUsage()
+    fetchPaymentMethodDistribution()
   }, 100)
 })
 
@@ -528,5 +694,42 @@ const handleMenuSelect = (_key) => {
   justify-content: center;
   align-items: center;
   min-height: 300px;
+}
+
+.payment-method-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.payment-method-item {
+  background: #F5F7FA;
+  padding: 15px;
+  border-radius: 8px;
+}
+
+.payment-method-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.payment-method-name {
+  font-weight: 500;
+  color: #303133;
+}
+
+.payment-method-percentage {
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.payment-method-item-detail {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #606266;
 }
 </style>

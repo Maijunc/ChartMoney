@@ -760,6 +760,36 @@ async def budget_usage(user_id: int = Query(..., ge=1),
         }
 
 
+# 支付方式分布分析
+@app.get("/analysis/payment_method_distribution")
+async def payment_method_distribution(user_id: int = Query(..., ge=1),
+                                       month: str = Query(...),
+                                       db: AsyncSession = Depends(database.get_db)
+                                       ):
+    """
+    获取支付方式分布分析
+    参数：
+    - user_id: 用户ID
+    - month: 月份，格式为 YYYY-MM，或 "all" 表示全部历史
+    """
+    result = await crud.get_payment_method_distribution(user_id, month, db)
+
+    if result == 0:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="进行数据库业务时出错")
+    elif result == -1:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="该用户不存在")
+    elif result == -2:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="月份格式错误")
+    else:
+        time, data = result
+        return {
+            "code": status.HTTP_200_OK,
+            "message": "成功",
+            "time": time,
+            "data": data
+        }
+
+
 
 
 
